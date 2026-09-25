@@ -121,6 +121,11 @@ st.markdown("""
 
     .stProgress > div > div > div > div {
         background-color: #3ecf8e !important;
+        border-radius: 4px !important;
+    }
+    .stProgress > div > div {
+        background-color: #27272a !important;
+        border-radius: 4px !important;
     }
 
     .stAlert {
@@ -153,18 +158,55 @@ st.markdown("""
         background-color: #18181b;
         border: 1px solid #27272a;
         border-radius: 8px;
-        padding: 16px;
+        padding: 20px;
         text-align: center;
+        transition: all 0.3s ease;
+    }
+    .metric-card:hover {
+        border-color: #3ecf8e;
+        transform: translateY(-2px);
     }
     .metric-value {
-        font-size: 2rem;
+        font-size: 2.5rem;
         font-weight: 700;
         color: #3ecf8e;
+        line-height: 1;
     }
+    .metric-value.total { color: #3b82f6; }
+    .metric-value.success { color: #3ecf8e; }
+    .metric-value.failed { color: #f43f5e; }
+    .metric-value.pending { color: #f59e0b; }
     .metric-label {
         font-size: 0.85rem;
         color: #a1a1aa;
-        margin-top: 4px;
+        margin-top: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 500;
+    }
+
+    .progress-container {
+        background-color: #18181b;
+        border: 1px solid #27272a;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+    .progress-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+    .progress-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #fafafa;
+    }
+    .progress-percentage {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #3ecf8e;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -589,28 +631,28 @@ def show_dashboard():
     with col1:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">{total_campaigns}</div>
+            <div class="metric-value total">{total_campaigns}</div>
             <div class="metric-label">Total Campaigns</div>
         </div>
         """, unsafe_allow_html=True)
     with col2:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">{running}</div>
+            <div class="metric-value success">{running}</div>
             <div class="metric-label">Running</div>
         </div>
         """, unsafe_allow_html=True)
     with col3:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">{total_success}</div>
+            <div class="metric-value success">{total_success}</div>
             <div class="metric-label">Successful</div>
         </div>
         """, unsafe_allow_html=True)
     with col4:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">{total_failed}</div>
+            <div class="metric-value failed">{total_failed}</div>
             <div class="metric-label">Failed</div>
         </div>
         """, unsafe_allow_html=True)
@@ -813,7 +855,6 @@ def show_new_campaign():
             with col2:
                 if st.button("🚀 Run in Browser", use_container_width=True):
                     st.info("Running in browser... Keep this tab open!")
-                    # Simplified browser run (similar to previous implementations)
                     run_browser_submission()
 
 def run_browser_submission():
@@ -827,11 +868,69 @@ def run_browser_submission():
         pending_indices = pending_indices[:config['subset_n']]
     
     total = len(pending_indices)
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    log_container = st.container()
     
-    submitted_count = 0
+    # Initialize counters
+    success_count = 0
+    failed_count = 0
+    pending_count = total
+    
+    # Progress and Stats Container
+    progress_container = st.container()
+    
+    with progress_container:
+        # Progress Bar Section
+        st.markdown("""
+        <div class="progress-container">
+            <div class="progress-header">
+                <div class="progress-title">Submission Progress</div>
+                <div class="progress-percentage" id="progress-pct">0%</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        progress_bar = st.progress(0)
+        
+        # Statistics Cards
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            total_placeholder = st.empty()
+            total_placeholder.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value total">{total}</div>
+                <div class="metric-label">Total Rows</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col2:
+            success_placeholder = st.empty()
+            success_placeholder.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value success">0</div>
+                <div class="metric-label">Successful</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col3:
+            failed_placeholder = st.empty()
+            failed_placeholder.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value failed">0</div>
+                <div class="metric-label">Failed</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col4:
+            pending_placeholder = st.empty()
+            pending_placeholder.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value pending">{total}</div>
+                <div class="metric-label">Pending</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # Submission Log
+    st.markdown("<h3>Live Submission Log</h3>", unsafe_allow_html=True)
+    log_df = pd.DataFrame(columns=["Row", "Status", "Submitted At", "HTTP Code", "Next Entry", "Gap"])
+    log_placeholder = st.empty()
     
     for i, idx in enumerate(pending_indices):
         row = df.loc[idx]
@@ -840,24 +939,78 @@ def run_browser_submission():
             val = normalize_value(row[col], config['field_types'].get(entry, "text"))
             payload[entry] = val
         
-        progress_bar.progress((i + 1) / total)
-        status_text.text(f"Submitting Row {i+1}/{total}...")
+        # Update progress
+        progress_pct = (i + 1) / total
+        progress_bar.progress(progress_pct)
         
+        # Submit
         try:
             r = requests.post(config['form_url'], data=payload, timeout=30)
+            ist_now = datetime.now(IST).strftime("%d-%m-%Y %I:%M:%S %p")
+            
             if r.status_code == 200:
-                submitted_count += 1
-                log_container.write(f"✅ Row {idx+1} Success")
+                success_count += 1
+                status_text = "Submitted"
+                
+                if i < total - 1:
+                    gap_sec = random.randint(config['delay_min'], config['delay_max'])
+                    next_time = (datetime.now(IST) + timedelta(seconds=gap_sec)).strftime("%d-%m-%Y %I:%M:%S %p IST")
+                    gap_text = format_human(gap_sec)
+                else:
+                    next_time, gap_text = "FINAL ENTRY", "-"
             else:
-                log_container.write(f"❌ Row {idx+1} Failed")
+                failed_count += 1
+                status_text = f"FAILED: HTTP {r.status_code}"
+                next_time, gap_text = "-", "-"
         except Exception as e:
-            log_container.write(f"❌ Row {idx+1} Error: {e}")
+            failed_count += 1
+            ist_now = datetime.now(IST).strftime("%d-%m-%Y %I:%M:%S %p")
+            status_text = f"ERROR: {str(e)}"
+            next_time, gap_text = "-", "-"
         
-        time.sleep(random.randint(config['delay_min'], config['delay_max']))
+        pending_count -= 1
+        
+        # Update statistics
+        success_placeholder.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value success">{success_count}</div>
+            <div class="metric-label">Successful</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        failed_placeholder.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value failed">{failed_count}</div>
+            <div class="metric-label">Failed</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        pending_placeholder.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value pending">{pending_count}</div>
+            <div class="metric-label">Pending</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Update log
+        new_row = {
+            "Row": idx + 1,
+            "Status": status_text,
+            "Submitted At": ist_now,
+            "HTTP Code": r.status_code if r.status_code == 200 else "Error",
+            "Next Entry": next_time,
+            "Gap": gap_text
+        }
+        log_df = pd.concat([log_df, pd.DataFrame([new_row])], ignore_index=True)
+        log_placeholder.dataframe(log_df, use_container_width=True, hide_index=True)
+        
+        # Delay
+        if i < total - 1:
+            time.sleep(random.randint(config['delay_min'], config['delay_max']))
     
-    status_text.text("Complete!")
+    # Completion
     st.balloons()
-    st.success(f"Successfully submitted {submitted_count} rows")
+    st.success(f"✅ Campaign completed! {success_count} rows submitted successfully.")
 
 def show_history():
     st.markdown("<h2>Campaign History</h2>", unsafe_allow_html=True)
