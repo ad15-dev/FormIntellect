@@ -24,14 +24,186 @@ try:
 except ImportError:
     OPENPYXL_AVAILABLE = False
 
+# ============================================================
+#  SUPABASE THEME & UX CONFIGURATION
+# ============================================================
+st.set_page_config(
+    page_title="Form Auto-Submitter",
+    page_icon="⚡",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
+# Inject Supabase-inspired CSS
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    /* --- Global & Backgrounds --- */
+    .stApp {
+        background-color: #09090b !important; /* Zinc 950 */
+        color: #fafafa !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+    main .block-container {
+        padding-top: 2.5rem;
+        padding-bottom: 3rem;
+        max-width: 900px; /* Keep it focused and readable */
+    }
+
+    /* --- Typography --- */
+    h1, h2, h3, h4, h5 {
+        color: #fafafa !important;
+        font-weight: 600 !important;
+        letter-spacing: -0.02em;
+    }
+    h1 { font-size: 2rem; margin-bottom: 0.2rem; }
+    h2 { font-size: 1.4rem; margin-top: 2rem; margin-bottom: 1rem; }
+    h3 { font-size: 1.1rem; color: #a1a1aa !important; font-weight: 500 !important; }
+    p, span, label, .stMarkdown, .stCaption {
+        color: #a1a1aa !important;
+        font-size: 0.9rem !important;
+    }
+
+    /* --- Inputs (Text, Number) --- */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input {
+        background-color: #18181b !important; /* Zinc 900 */
+        border: 1px solid #27272a !important; /* Zinc 800 */
+        color: #fafafa !important;
+        border-radius: 6px !important;
+        padding: 10px 14px !important;
+        font-size: 14px !important;
+        font-family: 'Inter', sans-serif !important;
+        transition: all 0.2s ease;
+    }
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus {
+        border-color: #3ecf8e !important; /* Supabase Green */
+        box-shadow: 0 0 0 2px rgba(62, 207, 142, 0.15) !important;
+        background-color: #18181b !important;
+    }
+
+    /* --- File Uploader --- */
+    .stFileUploader > div {
+        background-color: #18181b !important;
+        border: 1px dashed #3f3f46 !important;
+        border-radius: 6px !important;
+        padding: 24px !important;
+        transition: all 0.2s ease;
+    }
+    .stFileUploader > div:hover {
+        border-color: #3ecf8e !important;
+        background-color: #1c1c1f !important;
+    }
+    .stFileUploader label {
+        color: #fafafa !important;
+        font-weight: 500 !important;
+    }
+
+    /* --- Buttons --- */
+    .stButton > button {
+        background-color: #18181b !important;
+        border: 1px solid #27272a !important;
+        color: #fafafa !important;
+        border-radius: 6px !important;
+        padding: 10px 20px !important;
+        font-weight: 500 !important;
+        font-family: 'Inter', sans-serif !important;
+        transition: all 0.2s ease;
+        width: 100%;
+    }
+    .stButton > button:hover {
+        background-color: #27272a !important;
+        border-color: #3ecf8e !important;
+        color: #3ecf8e !important;
+    }
+    
+    /* Primary Action Button (Supabase Green) */
+    .stButton > button[kind="primary"], 
+    .stButton > button[data-testid="baseButton-primary"] {
+        background-color: #3ecf8e !important;
+        border: 1px solid #3ecf8e !important;
+        color: #09090b !important;
+        font-weight: 600 !important;
+        box-shadow: 0 4px 12px rgba(62, 207, 142, 0.2);
+    }
+    .stButton > button[kind="primary"]:hover, 
+    .stButton > button[data-testid="baseButton-primary"]:hover {
+        background-color: #32b67a !important;
+        border-color: #32b67a !important;
+        color: #09090b !important;
+        box-shadow: 0 6px 16px rgba(62, 207, 142, 0.3);
+    }
+
+    /* --- Dataframe / Tabular Log --- */
+    .stDataFrame {
+        border: 1px solid #27272a !important;
+        border-radius: 8px !important;
+        overflow: hidden;
+        margin-top: 1rem;
+    }
+    /* Hide default streamlit dataframe header to make it look like a custom table */
+    .stDataFrame [data-testid="stElementContainer"] {
+        border: none !important;
+    }
+
+    /* --- Progress Bar --- */
+    .stProgress > div > div > div > div {
+        background-color: #3ecf8e !important;
+        border-radius: 4px !important;
+    }
+    .stProgress > div > div {
+        background-color: #27272a !important;
+        border-radius: 4px !important;
+    }
+
+    /* --- Alerts / Status --- */
+    .stAlert {
+        background-color: #18181b !important;
+        border: 1px solid #27272a !important;
+        border-radius: 6px !important;
+        padding: 16px !important;
+    }
+    .stAlert-success { border-left: 4px solid #3ecf8e !important; }
+    .stAlert-error { border-left: 4px solid #f43f5e !important; }
+    .stAlert-warning { border-left: 4px solid #f59e0b !important; }
+    .stAlert-info { border-left: 4px solid #3b82f6 !important; }
+    
+    .stAlert p, .stAlert span {
+        color: #e4e4e7 !important;
+    }
+
+    /* --- Dividers --- */
+    hr {
+        border-color: #27272a !important;
+        margin: 2rem 0 !important;
+    }
+
+    /* --- Hide Streamlit Branding --- */
+    #MainMenu, footer, header {
+        visibility: hidden;
+    }
+    
+    /* --- Custom Card Container --- */
+    .card {
+        background-color: #18181b;
+        border: 1px solid #27272a;
+        border-radius: 8px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 IST = pytz.timezone("Asia/Kolkata")
 MIN_SECONDS_PER_ROW = 2
-
-st.set_page_config(page_title="Form Auto-Submitter", layout="wide", page_icon="📝")
 
 # ============================================================
 #  EXACT NOTEBOOK FUNCTIONS (Unaltered Logic)
 # ============================================================
+# [Note: All utility, metadata, normalization, validation, and time window functions 
+# from the original notebook are preserved exactly as provided in the knowledge base.]
 
 def format_mm_ss(seconds):
     m, s = divmod(int(seconds), 60)
@@ -419,43 +591,54 @@ def generate_analysis_sheet_buffer(df, submitted_count):
     return out_buffer
 
 # ============================================================
-#  STREAMLIT UI & EXECUTION
+#  SUPABASE UI LAYOUT & EXECUTION
 # ============================================================
 
-st.title("📝 Google Form Auto-Submitter")
-st.caption("Exact replica of the original notebook logic.")
+# Hero Section
+st.markdown("<h1>⚡ Form Auto-Submitter</h1>", unsafe_allow_html=True)
+st.markdown("<p style='color:#a1a1aa; margin-top:-10px;'>Automate Google Form submissions with precision timing and randomized offsets.</p>", unsafe_allow_html=True)
+st.divider()
 
-with st.form("submission_form"):
-    st.subheader("1. File & Form Setup")
+# Configuration Card
+with st.container():
+    st.markdown("### 1. Configuration")
+    
     col1, col2 = st.columns(2)
     with col1:
-        uploaded_file = st.file_uploader("Upload Data File (.xlsx/.xls/.csv/.tsv/.ods/.json)", type=["xlsx", "xls", "csv", "tsv", "ods", "json"])
+        uploaded_file = st.file_uploader("Data File (.xlsx/.csv)", type=["xlsx", "xls", "csv", "tsv", "ods", "json"])
     with col2:
-        sheets_url = st.text_input("Or enter Google Sheets URL:", placeholder="https://docs.google.com/spreadsheets/...")
+        sheets_url = st.text_input("Or Google Sheets URL", placeholder="https://docs.google.com/spreadsheets/...")
     
-    prefilled_link = st.text_input("Enter Google Form pre-filled link:")
+    prefilled_link = st.text_input("Google Form Pre-filled Link", placeholder="https://docs.google.com/forms/d/e/.../viewform?usp=pp_url&entry...")
     
-    st.subheader("2. Row Selection")
+    st.divider()
+    st.markdown("### 2. Execution Settings")
     col3, col4 = st.columns(2)
     with col3:
-        use_random = st.checkbox("Use random rows? (y/n)", value=False)
+        use_random = st.checkbox("Use random rows?", value=False)
     with col4:
-        subset_n = st.number_input("How many random rows to submit? (0 = all)", min_value=0, value=0)
-        
-    st.subheader("3. Time Configuration")
-    st.caption("Time formats accepted: 12-hour (e.g. 09:30 AM, 11:00 PM) or 24-hour (e.g. 21:30)")
+        subset_n = st.number_input("How many random rows? (0 = all)", min_value=0, value=0)
+
+    st.divider()
+    st.markdown("### 3. Time Window Configuration")
+    st.caption("Formats: 12-hour (09:30 AM) or 24-hour (21:30)")
+    
     col5, col6 = st.columns(2)
     with col5:
-        start_input = st.text_input("Start time:", value="10:40")
-        start_rand_min = st.number_input("Random delay AFTER start (min seconds):", min_value=0, value=1)
-        start_rand_max = st.number_input("Random delay AFTER start (max seconds):", min_value=0, value=1)
+        start_input = st.text_input("Start time", value="10:40")
+        start_rand_min = st.number_input("Random delay AFTER start (min sec)", min_value=0, value=1)
+        start_rand_max = st.number_input("Random delay AFTER start (max sec)", min_value=0, value=1)
     with col6:
-        end_input = st.text_input("End time:", value="10:43")
-        end_rand_min = st.number_input("Random delay AFTER end (min seconds):", min_value=0, value=2)
-        end_rand_max = st.number_input("Random delay AFTER end (max seconds):", min_value=0, value=3)
+        end_input = st.text_input("End time", value="10:43")
+        end_rand_min = st.number_input("Random delay AFTER end (min sec)", min_value=0, value=2)
+        end_rand_max = st.number_input("Random delay AFTER end (max sec)", min_value=0, value=3)
 
-    submitted = st.form_submit_button("🚀 Start Submission Process", type="primary", use_container_width=True)
+    st.divider()
+    submitted = st.button("🚀 Initialize Submission Process", type="primary", use_container_width=True)
 
+# ============================================================
+#  EXECUTION LOGIC
+# ============================================================
 if submitted:
     # 1. Load Data
     try:
@@ -478,7 +661,7 @@ if submitted:
     df.columns = df.columns.str.strip()
     form_url = prefilled_link.split("/viewform")[0] + "/formResponse"
 
-    # 2. Map Columns
+    # 2. Map Columns & Filter
     status_col = None
     for col in df.columns:
         if col.strip().lower() in {"status", "submit", "submitted"}:
@@ -531,7 +714,7 @@ if submitted:
     if window_sec <= total_rows:
         window_sec = max(total_rows + 5, window_sec)
 
-    st.success(f"Time Window Configured: {rand_start.strftime('%I:%M:%S %p')} to {rand_end.strftime('%I:%M:%S %p')} IST")
+    st.success(f"**Time Window Configured:** {rand_start.strftime('%I:%M:%S %p')} to {rand_end.strftime('%I:%M:%S %p')} IST")
 
     # 5. Wait for Start Time
     now = datetime.now(IST)
@@ -547,9 +730,14 @@ if submitted:
     start_ref = datetime.now(IST)
     submitted_count = 0
 
+    # UI for Progress & Table
+    st.divider()
+    st.markdown("### Live Submission Log")
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
     log_df = pd.DataFrame(columns=["Row", "Status", "Submitted At", "HTTP Code", "Next Entry", "Gap"])
     log_placeholder = st.empty()
-    st.caption("Live Submission Log:")
 
     for i, (offset, idx) in enumerate(zip(offsets, pending_indices), 1):
         target = start_ref + timedelta(seconds=offset)
@@ -582,12 +770,15 @@ if submitted:
             "Gap": gap_text
         }
         log_df = pd.concat([log_df, pd.DataFrame([new_row])], ignore_index=True)
+        
+        # Update UI
+        progress_bar.progress(i / total_rows)
         log_placeholder.dataframe(log_df, use_container_width=True, hide_index=True)
 
+    # 7. Completion & Analysis Sheet
     st.balloons()
-    st.success(f"PROCESS COMPLETED. Successfully submitted {submitted_count} rows.")
+    st.success(f"**PROCESS COMPLETED.** Successfully submitted {submitted_count} rows.")
 
-    # 7. Generate Analysis Sheet
     if OPENPYXL_AVAILABLE and submitted_count > 0:
         with st.spinner("Generating Analysis sheet..."):
             analysis_buffer = generate_analysis_sheet_buffer(df, submitted_count)
