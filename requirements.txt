@@ -1,7 +1,5 @@
-streamlit==1.31.0
-pandas==2.1.4
-requests==2.31.0
-openpyxl==3.1.2
-pytz==2023.3
-sqlalchemy==2.0.25
-python-multipart==0.0.6
+streamlit>=1.35.0
+pandas>=2.2.0
+openpyxl>=3.1.2
+pytz>=2024.1
+requests>=2.31.0
