@@ -3,301 +3,268 @@ import json
 import os
 import random
 import re
-import sqlite3
+import sys
 import time
 import urllib.parse
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
 
 import pandas as pd
 import pytz
 import requests
 import streamlit as st
-from openpyxl import load_workbook
-from openpyxl.chart import BarChart, Reference
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
+
+try:
+    from openpyxl import load_workbook
+    from openpyxl.chart import BarChart, Reference
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
 
 # ============================================================
-# CONFIGURATION
+# CONFIG
 # ============================================================
 IST = pytz.timezone("Asia/Kolkata")
 MIN_SECONDS_PER_ROW = 2
-DB_PATH = "campaigns.db"
 
 st.set_page_config(
     page_title="formIntellect",
     page_icon="⚡",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # ============================================================
-# SUPABASE THEME CSS
+# MINIMAL MODERN UI
 # ============================================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+    /* Base */
     .stApp {
-        background-color: #09090b !important;
-        color: #fafafa !important;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        background: #0a0a0b;
+        color: #e4e4e7;
+        font-family: 'Inter', -apple-system, sans-serif;
     }
-    main .block-container {
-        padding-top: 2.5rem;
-        padding-bottom: 3rem;
-        max-width: 1000px;
+    .main .block-container {
+        padding: 2rem 1.5rem 4rem;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    @media (min-width: 768px) {
+        .main .block-container { padding: 3rem 2.5rem 5rem; }
     }
 
-    h1, h2, h3, h4, h5 {
+    /* Typography */
+    h1 {
+        font-size: clamp(1.8rem, 4vw, 2.5rem);
+        font-weight: 600;
+        letter-spacing: -0.03em;
         color: #fafafa !important;
-        font-weight: 600 !important;
+        margin-bottom: 0.3rem;
+    }
+    h2 {
+        font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+        font-weight: 600;
         letter-spacing: -0.02em;
+        color: #fafafa !important;
+        margin: 2rem 0 1rem;
     }
-    h1 { font-size: 2rem; margin-bottom: 0.2rem; }
-    h2 { font-size: 1.4rem; margin-top: 2rem; margin-bottom: 1rem; }
-    h3 { font-size: 1.1rem; color: #a1a1aa !important; font-weight: 500 !important; }
-    p, span, label, .stMarkdown, .stCaption {
+    h3 {
+        font-size: 1rem;
+        font-weight: 500;
         color: #a1a1aa !important;
-        font-size: 0.9rem !important;
+        margin-bottom: 0.75rem;
+    }
+    p, label, .stMarkdown { color: #a1a1aa !important; font-size: 0.9rem; }
+
+    /* Hero */
+    .hero {
+        padding: 2rem 0 1.5rem;
+        border-bottom: 1px solid #1f1f23;
+        margin-bottom: 2rem;
+    }
+    .hero-sub {
+        color: #71717a;
+        font-size: 0.95rem;
+        font-weight: 400;
+        margin-top: 0.5rem;
+    }
+    .hero-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        background: rgba(99, 102, 241, 0.1);
+        color: #818cf8;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        border-radius: 100px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        margin-bottom: 1rem;
     }
 
+    /* Cards */
+    .card {
+        background: #111113;
+        border: 1px solid #1f1f23;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: border-color 0.2s;
+    }
+    .card:hover { border-color: #27272a; }
+    .card-title {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #71717a;
+        font-weight: 500;
+        margin-bottom: 1rem;
+    }
+
+    /* Inputs */
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
-    .stSelectbox > div > div > div {
-        background-color: #18181b !important;
+    .stSelectbox > div > div > div,
+    .stTextArea textarea {
+        background: #0a0a0b !important;
         border: 1px solid #27272a !important;
         color: #fafafa !important;
-        border-radius: 6px !important;
-        padding: 10px 14px !important;
-        font-size: 14px !important;
+        border-radius: 8px !important;
+        padding: 0.65rem 0.9rem !important;
+        font-size: 0.875rem !important;
         font-family: 'Inter', sans-serif !important;
+        transition: border-color 0.15s !important;
     }
     .stTextInput > div > div > input:focus,
     .stNumberInput > div > div > input:focus {
-        border-color: #3ecf8e !important;
-        box-shadow: 0 0 0 2px rgba(62, 207, 142, 0.15) !important;
+        border-color: #6366f1 !important;
+        outline: none !important;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1) !important;
+    }
+    .stTextInput label, .stNumberInput label, .stSelectbox label {
+        font-size: 0.8rem !important;
+        color: #a1a1aa !important;
+        font-weight: 500 !important;
+        margin-bottom: 0.4rem !important;
     }
 
-    .stFileUploader > div {
-        background-color: #18181b !important;
-        border: 1px dashed #3f3f46 !important;
-        border-radius: 6px !important;
-        padding: 24px !important;
-    }
-    .stFileUploader > div:hover {
-        border-color: #3ecf8e !important;
-    }
-
+    /* Buttons */
     .stButton > button {
-        background-color: #18181b !important;
+        background: #18181b !important;
         border: 1px solid #27272a !important;
         color: #fafafa !important;
-        border-radius: 6px !important;
-        padding: 10px 20px !important;
+        border-radius: 8px !important;
+        padding: 0.6rem 1.2rem !important;
         font-weight: 500 !important;
-        transition: all 0.2s ease;
+        font-size: 0.875rem !important;
+        transition: all 0.15s !important;
         width: 100%;
     }
     .stButton > button:hover {
-        background-color: #27272a !important;
-        border-color: #3ecf8e !important;
-        color: #3ecf8e !important;
+        background: #1f1f23 !important;
+        border-color: #3f3f46 !important;
     }
-    
     .stButton > button[kind="primary"] {
-        background-color: #3ecf8e !important;
-        border: 1px solid #3ecf8e !important;
-        color: #09090b !important;
+        background: #6366f1 !important;
+        border: 1px solid #6366f1 !important;
+        color: #fff !important;
         font-weight: 600 !important;
-        box-shadow: 0 4px 12px rgba(62, 207, 142, 0.2);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.3);
     }
     .stButton > button[kind="primary"]:hover {
-        background-color: #32b67a !important;
-        border-color: #32b67a !important;
+        background: #4f46e5 !important;
+        border-color: #4f46e5 !important;
     }
 
+    /* File Uploader */
+    .stFileUploader > div {
+        background: #0a0a0b !important;
+        border: 1px dashed #27272a !important;
+        border-radius: 10px !important;
+        padding: 2rem !important;
+    }
+    .stFileUploader > div:hover { border-color: #6366f1 !important; }
+
+    /* Progress */
     .stProgress > div > div > div > div {
-        background-color: #3ecf8e !important;
+        background: linear-gradient(90deg, #6366f1, #8b5cf6) !important;
         border-radius: 4px !important;
     }
     .stProgress > div > div {
-        background-color: #27272a !important;
+        background: #1f1f23 !important;
         border-radius: 4px !important;
     }
 
+    /* Alerts */
     .stAlert {
-        background-color: #18181b !important;
-        border: 1px solid #27272a !important;
-        border-radius: 6px !important;
+        background: #111113 !important;
+        border: 1px solid #1f1f23 !important;
+        border-radius: 8px !important;
+        padding: 0.9rem 1rem !important;
     }
-    .stAlert-success { border-left: 4px solid #3ecf8e !important; }
-    .stAlert-error { border-left: 4px solid #f43f5e !important; }
-    .stAlert-warning { border-left: 4px solid #f59e0b !important; }
+    .stAlert-success { border-left: 3px solid #10b981 !important; }
+    .stAlert-error { border-left: 3px solid #ef4444 !important; }
+    .stAlert-warning { border-left: 3px solid #f59e0b !important; }
+    .stAlert-info { border-left: 3px solid #6366f1 !important; }
 
-    hr {
-        border-color: #27272a !important;
-        margin: 2rem 0 !important;
-    }
-
-    #MainMenu, footer, header {
-        visibility: hidden;
-    }
-
-    .card {
-        background-color: #18181b;
-        border: 1px solid #27272a;
-        border-radius: 8px;
-        padding: 24px;
-        margin-bottom: 24px;
-    }
-
-    .metric-card {
-        background-color: #18181b;
-        border: 1px solid #27272a;
-        border-radius: 8px;
-        padding: 20px;
-        text-align: center;
-        transition: all 0.3s ease;
-    }
-    .metric-card:hover {
-        border-color: #3ecf8e;
-        transform: translateY(-2px);
+    /* Metrics */
+    .metric {
+        background: #111113;
+        border: 1px solid #1f1f23;
+        border-radius: 10px;
+        padding: 1.1rem 1.25rem;
     }
     .metric-value {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: #3ecf8e;
-        line-height: 1;
-    }
-    .metric-value.total { color: #3b82f6; }
-    .metric-value.success { color: #3ecf8e; }
-    .metric-value.failed { color: #f43f5e; }
-    .metric-value.pending { color: #f59e0b; }
-    .metric-label {
-        font-size: 0.85rem;
-        color: #a1a1aa;
-        margin-top: 8px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        font-weight: 500;
-    }
-
-    .progress-container {
-        background-color: #18181b;
-        border: 1px solid #27272a;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 24px;
-    }
-    .progress-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 12px;
-    }
-    .progress-title {
-        font-size: 1rem;
+        font-size: 1.75rem;
         font-weight: 600;
         color: #fafafa;
+        letter-spacing: -0.02em;
+        line-height: 1;
     }
-    .progress-percentage {
-        font-size: 1.2rem;
-        font-weight: 700;
-        color: #3ecf8e;
+    .metric-label {
+        font-size: 0.72rem;
+        color: #71717a;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-top: 0.5rem;
+        font-weight: 500;
+    }
+    .metric.accent .metric-value { color: #818cf8; }
+    .metric.success .metric-value { color: #34d399; }
+    .metric.warn .metric-value { color: #fbbf24; }
+    .metric.danger .metric-value { color: #f87171; }
+
+    /* Section divider */
+    .divider {
+        height: 1px;
+        background: #1f1f23;
+        margin: 1.5rem 0;
+    }
+
+    /* Hide clutter */
+    #MainMenu, footer, header { visibility: hidden; }
+    .stDeployButton { display: none !important; }
+
+    /* Dataframe */
+    .stDataFrame { border-radius: 8px; overflow: hidden; }
+
+    /* Checkbox */
+    .stCheckbox > label { color: #a1a1aa !important; }
+
+    /* Expander */
+    .streamlit-expanderHeader {
+        background: #111113 !important;
+        border: 1px solid #1f1f23 !important;
+        border-radius: 8px !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# DATABASE SETUP
-# ============================================================
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS campaigns (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            form_url TEXT NOT NULL,
-            source_type TEXT NOT NULL,
-            source_file TEXT,
-            total_rows INTEGER DEFAULT 0,
-            success_count INTEGER DEFAULT 0,
-            failed_count INTEGER DEFAULT 0,
-            pending_count INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'draft',
-            start_time TEXT,
-            end_time TEXT,
-            config_json TEXT,
-            created_at TEXT,
-            updated_at TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-def save_campaign(campaign_data):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
-        INSERT OR REPLACE INTO campaigns 
-        (id, name, form_url, source_type, source_file, total_rows, success_count, 
-         failed_count, pending_count, status, start_time, end_time, config_json, 
-         created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        campaign_data['id'],
-        campaign_data['name'],
-        campaign_data['form_url'],
-        campaign_data['source_type'],
-        campaign_data.get('source_file'),
-        campaign_data.get('total_rows', 0),
-        campaign_data.get('success_count', 0),
-        campaign_data.get('failed_count', 0),
-        campaign_data.get('pending_count', 0),
-        campaign_data.get('status', 'draft'),
-        campaign_data.get('start_time'),
-        campaign_data.get('end_time'),
-        json.dumps(campaign_data.get('config', {})),
-        campaign_data.get('created_at', datetime.now(IST).isoformat()),
-        datetime.now(IST).isoformat()
-    ))
-    conn.commit()
-    conn.close()
-
-def get_all_campaigns():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('SELECT * FROM campaigns ORDER BY created_at DESC')
-    rows = c.fetchall()
-    conn.close()
-    
-    campaigns = []
-    for row in rows:
-        campaigns.append({
-            'id': row[0],
-            'name': row[1],
-            'form_url': row[2],
-            'source_type': row[3],
-            'source_file': row[4],
-            'total_rows': row[5],
-            'success_count': row[6],
-            'failed_count': row[7],
-            'pending_count': row[8],
-            'status': row[9],
-            'start_time': row[10],
-            'end_time': row[11],
-            'config': json.loads(row[12]) if row[12] else {},
-            'created_at': row[13],
-            'updated_at': row[14]
-        })
-    return campaigns
-
-# ============================================================
-# UTILITY FUNCTIONS (From CSE2.ipynb)
+# UTILITIES (from CSE2.ipynb - preserved)
 # ============================================================
 def format_mm_ss(seconds):
     m, s = divmod(int(seconds), 60)
@@ -305,8 +272,7 @@ def format_mm_ss(seconds):
 
 def format_human(seconds):
     m, s = divmod(int(seconds), 60)
-    if m: return f"{m}m {s}s"
-    return f"{s}s"
+    return f"{m}m {s}s" if m else f"{s}s"
 
 def parse_time_input(time_str):
     time_str = time_str.strip()
@@ -324,8 +290,7 @@ def extract_entry_ids(prefilled_link):
     seen, ids = set(), []
     for key, _ in pairs:
         if key.startswith("entry.") and key not in seen:
-            ids.append(key)
-            seen.add(key)
+            ids.append(key); seen.add(key)
     return ids
 
 def _parse_fb_blob(html):
@@ -351,21 +316,78 @@ def _parse_fb_blob(html):
                 except: return None
     return None
 
-def fetch_form_metadata(prefilled_link):
-    try:
-        resp = requests.get(prefilled_link, timeout=30)
-        html = resp.text
-    except:
-        return {}, {}, [], []
+def _options_from_blob(blob):
+    result = {}
+    try: items = blob[1][1]
+    except: return result
+    for item in items:
+        if not isinstance(item, list) or len(item) < 5: continue
+        question = item[4]
+        if not isinstance(question, list) or not question: continue
+        q0 = question[0]
+        if not isinstance(q0, list) or len(q0) < 2: continue
+        eid = q0[0]
+        if eid is None: continue
+        opts = []
+        if isinstance(q0[1], list):
+            for opt in q0[1]:
+                if isinstance(opt, list) and opt and isinstance(opt[0], str):
+                    opts.append(opt[0])
+        if opts: result[f"entry.{eid}"] = opts
+    return result
 
+def _grid_from_blob(blob):
+    result = {}
+    try: items = blob[1][1]
+    except: return result
+    for item in items:
+        if not isinstance(item, list) or len(item) < 5: continue
+        q_label = item[1] if len(item) > 1 and isinstance(item[1], str) else ""
+        question = item[4]
+        if not isinstance(question, list) or len(question) < 2: continue
+        sub_entries, col_options, row_labels = [], [], []
+        for q_item in question:
+            if not isinstance(q_item, list) or len(q_item) < 2: continue
+            eid = q_item[0]
+            if eid is None: continue
+            opts = []
+            if isinstance(q_item[1], list):
+                for opt in q_item[1]:
+                    if isinstance(opt, list) and opt and isinstance(opt[0], str):
+                        opts.append(opt[0])
+            if opts:
+                sub_entries.append(f"entry.{eid}")
+                if not col_options: col_options = opts
+            lbl = q_item[3] if len(q_item) > 3 and isinstance(q_item[3], str) else f"entry.{eid}"
+            row_labels.append(lbl)
+        if len(sub_entries) >= 2:
+            if len(row_labels) != len(sub_entries): row_labels = list(sub_entries)
+            for i, eid in enumerate(sub_entries):
+                result[eid] = {
+                    "question_label": q_label, "sub_label": row_labels[i],
+                    "all_sub_entries": sub_entries, "options": col_options,
+                }
+    return result
+
+def fetch_form_metadata(prefilled_link):
+    try: resp = requests.get(prefilled_link, timeout=30)
+    except: return {}, {}, {}, []
+    html = resp.text
     field_types = {}
     for m in re.finditer(r'name="(entry\.\d+)"[^>]*type="([^"]+)"', html):
         eid, itype = m.group(1), m.group(2).lower()
-        field_types[eid] = itype
-
+        if eid not in field_types: field_types[eid] = itype
+        elif "checkbox" in (field_types[eid], itype): field_types[eid] = "checkbox"
+    for m in re.finditer(r'<textarea[^>]*name="(entry\.\d+)"', html):
+        field_types.setdefault(m.group(1), "textarea")
+    for m in re.finditer(r'<select[^>]*name="(entry\.\d+)"', html):
+        field_types.setdefault(m.group(1), "select")
     options_by_entry, grid_info, questions_order = {}, {}, []
     blob = _parse_fb_blob(html)
     if blob:
+        options_by_entry = _options_from_blob(blob)
+        grid_info = _grid_from_blob(blob)
+        for eid in grid_info: field_types[eid] = "grid"
         try:
             for item in blob[1][1]:
                 if not isinstance(item, list) or len(item) < 5: continue
@@ -379,659 +401,508 @@ def fetch_form_metadata(prefilled_link):
                     eid = f"entry.{eid_raw}"
                     ftype = field_types.get(eid, "text")
                     questions_order.append((eid, label, ftype))
-                    
-                    if isinstance(q_item[1], list):
-                        opts = [opt[0] for opt in q_item[1] if isinstance(opt, list) and opt and isinstance(opt[0], str)]
-                        if opts: options_by_entry[eid] = opts
         except: pass
-
+    if not questions_order:
+        for eid in extract_entry_ids(prefilled_link):
+            ftype = field_types.get(eid, "text")
+            questions_order.append((eid, eid, ftype))
     return field_types, options_by_entry, grid_info, questions_order
 
 def normalize_value(raw, entry_type="text"):
     if pd.isna(raw): return "NA"
+    if isinstance(raw, (pd.Timestamp, datetime)):
+        if entry_type == "date": return raw.strftime("%Y-%m-%d")
+        if entry_type == "time": return raw.strftime("%H:%M")
+        if entry_type == "datetime-local": return raw.strftime("%Y-%m-%dT%H:%M")
     text = str(raw).strip()
-    return text if text else "NA"
+    if not text: return "NA"
+    if text.lower() in {"na", "n/a", "none", "null"}: return text
+    if entry_type == "datetime-local" and "  " in text and "T" not in text:
+        text = text.replace("  ", "T", 1)
+    return text
+
+def _case_match(value, options):
+    lower_map = {o.lower(): o for o in options if isinstance(o, str)}
+    return lower_map.get(value.lower())
 
 def best_option(value, options):
-    if not options or value in options: return value
-    lower_map = {o.lower(): o for o in options if isinstance(o, str)}
-    return lower_map.get(value.lower(), options[0])
+    if not options: return value
+    if value in options: return value
+    matched = _case_match(value, options)
+    if matched: return matched
+    try:
+        num = float(value)
+        candidates = []
+        for o in options:
+            try: candidates.append((abs(float(o) - num), o))
+            except: pass
+        if candidates: return sorted(candidates)[0][1]
+    except: pass
+    return options[0]
 
-def validate_and_correct(df, pending_indices, required_columns, field_types, options_by_entry):
+def _try_parse(value, fmt):
+    try:
+        datetime.strptime(value, fmt); return True
+    except ValueError: return False
+
+def auto_correct(df, pending_indices, required_columns, field_types, options_by_entry):
+    corrections, errors = [], []
+    for idx in pending_indices:
+        for col, entry in required_columns.items():
+            etype = field_types.get(entry, "text")
+            value = normalize_value(df.at[idx, col], etype)
+            new_val, reason = value, None
+            opts = options_by_entry.get(entry)
+            if opts:
+                if etype == "checkbox" or ", " in value:
+                    parts = [v.strip() for v in value.split(", ") if v.strip()]
+                    fixed = [best_option(v, opts) for v in parts]
+                    candidate = ", ".join(dict.fromkeys(fixed))
+                    if candidate != value: new_val, reason = candidate, "normalized checkbox options"
+                else:
+                    candidate = best_option(value, opts)
+                    if candidate != value: new_val, reason = candidate, "normalized to allowed option"
+            if etype == "date":
+                try:
+                    new_val = pd.to_datetime(value).strftime("%Y-%m-%d")
+                    if new_val != value: reason = "normalized date"
+                except: errors.append((idx, col, entry, value, "invalid date")); continue
+            elif etype == "time":
+                try:
+                    new_val = pd.to_datetime(value).strftime("%H:%M")
+                    if new_val != value: reason = "normalized time"
+                except: errors.append((idx, col, entry, value, "invalid time")); continue
+            elif etype == "datetime-local":
+                try:
+                    new_val = pd.to_datetime(value).strftime("%Y-%m-%dT%H:%M")
+                    if new_val != value: reason = "normalized datetime"
+                except: errors.append((idx, col, entry, value, "invalid datetime")); continue
+            if new_val != value:
+                df.at[idx, col] = new_val
+                corrections.append((idx, col, entry, value, new_val, reason))
+    return corrections, errors
+
+def validate_data(df, pending_indices, required_columns, field_types, options_by_entry):
     errors = []
     for idx in pending_indices:
         for col, entry in required_columns.items():
             etype = field_types.get(entry, "text")
             value = normalize_value(df.at[idx, col], etype)
+            if etype in {"radio", "select"} and ", " in value:
+                errors.append((idx, col, entry, value, "multiple values for single-choice")); continue
             opts = options_by_entry.get(entry)
-            
             if opts:
-                candidate = best_option(value, opts)
-                if candidate != value:
-                    df.at[idx, col] = candidate
-                    
-            if opts and df.at[idx, col] not in opts:
-                errors.append(f"Row {idx+1}, Col '{col}': '{df.at[idx, col]}' not in options")
+                parts = [v.strip() for v in value.split(", ") if v.strip()] if (etype == "checkbox" or ", " in value) else [value]
+                bad = [v for v in parts if v not in opts]
+                if bad:
+                    errors.append((idx, col, entry, value, f"not in options: {', '.join(bad)}")); continue
+            if etype == "date":
+                if not _try_parse(value, "%Y-%m-%d"):
+                    errors.append((idx, col, entry, value, "invalid date (YYYY-MM-DD)"))
+            elif etype == "time":
+                if not any(_try_parse(value, f) for f in ("%H:%M", "%H:%M:%S")):
+                    errors.append((idx, col, entry, value, "invalid time (HH:MM or HH:MM:SS)"))
+            elif etype == "datetime-local":
+                if not any(_try_parse(value, f) for f in ("%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S")):
+                    errors.append((idx, col, entry, value, "invalid datetime (YYYY-MM-DDTHH:MM)"))
     return errors
 
-def generate_analysis_buffer(df, submitted_count):
-    buffer = io.BytesIO()
-    df.to_excel(buffer, index=False, engine='openpyxl')
-    buffer.seek(0)
-    
-    wb = load_workbook(buffer)
+def map_columns(df, prefilled_link, status_col):
+    entry_cols = [c for c in df.columns if c.startswith("entry.")]
+    prefilled_ids = extract_entry_ids(prefilled_link)
+    non_status_cols = [c for c in df.columns if c != status_col]
+    if entry_cols: return {c: c for c in entry_cols}
+    if prefilled_ids:
+        matched = [c for c in prefilled_ids if c in df.columns]
+        if matched: return {c: c for c in matched}
+        if len(prefilled_ids) == len(non_status_cols):
+            return dict(zip(non_status_cols, prefilled_ids))
+    return {}
+
+def wait_until(target_dt):
+    while True:
+        remaining = (target_dt - datetime.now(IST)).total_seconds()
+        if remaining <= 0: break
+        slp = max(0.1, remaining - random.uniform(1.5, 4.5))
+        time.sleep(min(slp, remaining))
+
+def submit_row(row, required_columns, field_types, form_url, prefilled_link, max_retries=3):
+    payload = {}
+    for col, entry in required_columns.items():
+        etype = field_types.get(entry, "text")
+        value = normalize_value(row[col], etype)
+        if ", " in value: payload[entry] = [v.strip() for v in value.split(", ")]
+        else: payload[entry] = value
+    session = requests.Session()
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": prefilled_link,
+        "Origin": "https://docs.google.com",
+    }
+    for _ in range(max_retries):
+        try:
+            r = session.post(form_url, data=payload, headers=headers, timeout=30)
+            if r.status_code == 200 and ("Your response has been recorded" in r.text or "formResponse" in r.url):
+                return 200, "Success"
+            return r.status_code, f"HTTP {r.status_code}"
+        except: pass
+        time.sleep(2)
+    return 0, "Failed after retries"
+
+def generate_analysis_sheet(df, file_path, submitted_count):
+    if not OPENPYXL_AVAILABLE: return
+    lower = file_path.lower()
+    if not (lower.endswith(".xlsx") or lower.endswith(".xls")): return
+    wb = load_workbook(file_path)
     if "Analysis" in wb.sheetnames: del wb["Analysis"]
     ws = wb.create_sheet("Analysis")
-    
     NAVY, BLUE, LIGHT_BLUE, WHITE = "1F3864", "2E75B6", "DEEAF1", "FFFFFF"
     solid = lambda c: PatternFill("solid", fgColor=c)
     thin = Side(style="thin", color="CCCCCC")
     bdr = Border(left=thin, right=thin, top=thin, bottom=thin)
     ctr = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    
+    ws.merge_cells("A1:F1")
     ws["A1"] = "Response Analysis"
     ws["A1"].fill, ws["A1"].font = solid(NAVY), Font(bold=True, color=WHITE, size=14)
-    
-    current_row = 3
-    for col_name in df.columns:
-        if col_name.lower() in {"status", "submit"}: continue
+    ws["A1"].alignment = ctr
+    ws.row_dimensions[1].height = 28
+    ws["A2"] = f"Generated: {datetime.now().strftime('%d-%m-%Y %I:%M %p')}"
+    ws["B2"] = f"Total rows: {len(df)}"
+    ws["C2"] = f"Submitted: {submitted_count}"
+    for cell in (ws["A2"], ws["B2"], ws["C2"]):
+        cell.font = Font(color="444444", size=10, italic=True)
+    ws.column_dimensions["A"].width = 5
+    ws.column_dimensions["B"].width = 32
+    ws.column_dimensions["C"].width = 10
+    ws.column_dimensions["D"].width = 12
+    status_names = {"status", "submit", "submitted"}
+    analysis_cols = [c for c in df.columns if c.lower() not in status_names]
+    current_row = 4
+    for col_name in analysis_cols:
         series = df[col_name].dropna().astype(str).str.strip()
+        series = series[series != ""]
         if series.empty: continue
-        
-        freq = Counter(series.tolist())
-        ws.cell(row=current_row, column=1, value=col_name).fill = solid(BLUE)
+        is_checkbox = series.str.contains(", ").any()
+        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5)
+        cell = ws.cell(row=current_row, column=1, value=col_name)
+        cell.fill, cell.font, cell.alignment = solid(BLUE), Font(bold=True, color=WHITE, size=11), ctr
+        ws.row_dimensions[current_row].height = 20
         current_row += 1
-        
-        for ri, (ans, cnt) in enumerate(sorted(freq.items(), key=lambda x: -x[1]), 1):
-            ws.cell(row=current_row, column=1, value=ans).border = bdr
-            ws.cell(row=current_row, column=2, value=cnt).border = bdr
+        hdr_row = current_row
+        for ci, h in enumerate(["#", "Answer", "Count", "% of Total"], 1):
+            c = ws.cell(row=current_row, column=ci, value=h)
+            c.fill, c.font, c.alignment, c.border = solid(BLUE), Font(bold=True, color=WHITE, size=10), ctr, bdr
+        current_row += 1
+        if is_checkbox:
+            all_vals = []
+            for v in series: all_vals.extend(x.strip() for x in v.split(", ") if x.strip())
+            freq, total_responders = Counter(all_vals), len(series)
+        else:
+            freq, total_responders = Counter(series.tolist()), len(series)
+        items_sorted = sorted(freq.items(), key=lambda x: -x[1])
+        total_count = sum(freq.values())
+        data_start = current_row
+        for ri, (answer, count) in enumerate(items_sorted, 1):
+            pct = (count / total_responders * 100) if total_responders else 0
+            row_vals = [ri, answer, count, f"{pct:.1f}%"]
+            for ci, val in enumerate(row_vals, 1):
+                c = ws.cell(row=current_row, column=ci, value=val)
+                c.fill = solid(LIGHT_BLUE if ri % 2 == 0 else WHITE)
+                c.font, c.alignment, c.border = Font(color="1F1F1F", size=10), ctr, bdr
             current_row += 1
+        total_row_idx = current_row
+        total_pct = "100%" if not is_checkbox else "---"
+        for ci, val in enumerate(["", "TOTAL", total_count, total_pct], 1):
+            c = ws.cell(row=current_row, column=ci, value=val)
+            c.fill, c.font, c.alignment, c.border = solid(NAVY), Font(bold=True, color=WHITE, size=10), ctr, bdr
         current_row += 1
-        
-    out_buffer = io.BytesIO()
-    wb.save(out_buffer)
-    out_buffer.seek(0)
-    return out_buffer
+        if items_sorted:
+            chart = BarChart()
+            chart.type, chart.grouping = "col", "clustered"
+            chart.title = str(col_name)[:30]
+            chart.y_axis.title, chart.x_axis.title = "Count", "Answer"
+            chart.style, chart.width, chart.height = 10, 18, 12
+            data_ref = Reference(ws, min_col=3, max_col=3, min_row=hdr_row, max_row=total_row_idx - 1)
+            cats_ref = Reference(ws, min_col=2, max_col=2, min_row=data_start, max_row=total_row_idx - 1)
+            chart.add_data(data_ref, titles_from_data=True)
+            chart.set_categories(cats_ref)
+            ws.add_chart(chart, f"{get_column_letter(7)}{data_start}")
+        current_row += 2
+    wb.save(file_path)
 
 # ============================================================
-# OFFLINE SCRIPT GENERATOR
-# ============================================================
-def generate_offline_script(campaign_config, df_data):
-    script = f'''
-import pandas as pd
-import requests
-import time
-import random
-import io
-from datetime import datetime, timedelta
-import pytz
-
-# --- CAMPAIGN CONFIGURATION ---
-IST = pytz.timezone("Asia/Kolkata")
-FORM_URL = "{campaign_config['form_url']}"
-COLUMN_MAPPING = {json.dumps(campaign_config['column_mapping'])}
-FIELD_TYPES = {json.dumps(campaign_config['field_types'])}
-OPTIONS_BY_ENTRY = {json.dumps(campaign_config['options_by_entry'])}
-START_TIME_STR = "{campaign_config['start_time']}"
-END_TIME_STR = "{campaign_config['end_time']}"
-DELAY_MIN = {campaign_config['delay_min']}
-DELAY_MAX = {campaign_config['delay_max']}
-USE_RANDOM = {campaign_config['use_random']}
-SUBSET_N = {campaign_config['subset_n']}
-
-# --- EMBEDDED DATA ---
-CSV_DATA = """{df_data}"""
-
-def normalize_value(raw, entry_type="text"):
-    if pd.isna(raw): return "NA"
-    text = str(raw).strip()
-    return text if text else "NA"
-
-def best_option(value, options):
-    if not options or value in options: return value
-    lower_map = {{o.lower(): o for o in options if isinstance(o, str)}}
-    return lower_map.get(value.lower(), options[0])
-
-def main():
-    print("🚀 Starting Offline Auto-Submitter...")
-    print("Campaign: {campaign_config['name']}")
-    df = pd.read_csv(io.StringIO(CSV_DATA))
-    
-    if "Status" not in df.columns:
-        df["Status"] = ""
-        
-    pending_indices = df[df["Status"].str.lower() != "submitted"].index.tolist()
-    
-    if USE_RANDOM:
-        random.shuffle(pending_indices)
-        if SUBSET_N > 0:
-            pending_indices = pending_indices[:SUBSET_N]
-    
-    # Time Logic
-    now = datetime.now(IST)
-    today = now.date()
-    
-    try:
-        sh, sm = map(int, START_TIME_STR.split(":")[:2])
-        eh, em = map(int, END_TIME_STR.split(":")[:2])
-    except:
-        print("❌ Invalid time format. Using immediate start.")
-        sh, sm = now.hour, now.minute
-        eh, em = (now + timedelta(minutes=5)).hour, (now + timedelta(minutes=5)).minute
-    
-    start_dt = IST.localize(datetime(today.year, today.month, today.day, sh, sm))
-    end_dt = IST.localize(datetime(today.year, today.month, today.day, eh, em))
-    
-    if end_dt <= start_dt:
-        end_dt += timedelta(days=1)
-        
-    if now < start_dt:
-        wait_sec = (start_dt - now).total_seconds()
-        print(f"⏳ Waiting until {{start_dt.strftime('%H:%M')}}... ({{int(wait_sec)}} seconds)")
-        print("💡 TIP: Configure your OS power settings to prevent sleep during long runs.")
-        time.sleep(wait_sec)
-        
-    print(f"✅ Starting submission window...")
-    
-    submitted_count = 0
-    
-    for idx in pending_indices:
-        row = df.loc[idx]
-        payload = {{}}
-        for col, entry in COLUMN_MAPPING.items():
-            etype = FIELD_TYPES.get(entry, "text")
-            val = normalize_value(row[col], etype)
-            opts = OPTIONS_BY_ENTRY.get(entry)
-            if opts:
-                val = best_option(val, opts)
-            payload[entry] = val
-            
-        try:
-            r = requests.post(FORM_URL, data=payload, timeout=30)
-            if r.status_code == 200:
-                df.at[idx, "Status"] = "submitted"
-                submitted_count += 1
-                print(f"✅ Row {{idx+1}} Submitted")
-            else:
-                print(f"❌ Row {{idx+1}} Failed: HTTP {{r.status_code}}")
-        except Exception as e:
-            print(f"❌ Row {{idx+1}} Error: {{e}}")
-            
-        time.sleep(random.randint(DELAY_MIN, DELAY_MAX))
-        
-    print(f"\\n🎉 Process Complete. {{submitted_count}} rows submitted.")
-    print("Saving updated CSV...")
-    df.to_csv("submitted_results.csv", index=False)
-    print("Saved to submitted_results.csv")
-    print("\\n💡 You can now close this window. The script has finished.")
-
-if __name__ == "__main__":
-    main()
-'''
-    return script
-
-# ============================================================
-# MAIN APPLICATION
+# MAIN APP
 # ============================================================
 def main():
-    init_db()
-    
-    # Navigation
-    if 'page' not in st.session_state:
-        st.session_state.page = 'dashboard'
-    if 'campaign_config' not in st.session_state:
-        st.session_state.campaign_config = {}
-    if 'df' not in st.session_state:
-        st.session_state.df = None
-    
-    # Header
-    st.markdown("<h1>⚡ formIntellect</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#a1a1aa; margin-top:-10px;'>A jugad that passes the authenticity of real interaction.</p>", unsafe_allow_html=True)
-    st.divider()
-    
-    # Navigation Buttons
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("📊 Dashboard", use_container_width=True):
-            st.session_state.page = 'dashboard'
-            st.rerun()
-    with col2:
-        if st.button("➕ New Campaign", use_container_width=True):
-            st.session_state.page = 'new_campaign'
-            st.session_state.campaign_config = {}
-            st.session_state.df = None
-            st.rerun()
-    with col3:
-        if st.button("📜 History", use_container_width=True):
-            st.session_state.page = 'history'
-            st.rerun()
-    
-    st.divider()
-    
-    # Page Router
-    if st.session_state.page == 'dashboard':
-        show_dashboard()
-    elif st.session_state.page == 'new_campaign':
-        show_new_campaign()
-    elif st.session_state.page == 'history':
-        show_history()
+    # Hero
+    st.markdown("""
+    <div class="hero">
+        <div class="hero-badge">⚡ Automated Form Submitter</div>
+        <h1>formIntellect</h1>
+        <p class="hero-sub">Submit Google Form responses with precision timing and smart validation.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-def show_dashboard():
-    st.markdown("<h2>Campaign Dashboard</h2>", unsafe_allow_html=True)
-    
-    campaigns = get_all_campaigns()
-    
-    # Statistics
-    total_campaigns = len(campaigns)
-    running = sum(1 for c in campaigns if c['status'] == 'running')
-    total_success = sum(c['success_count'] for c in campaigns)
-    total_failed = sum(c['failed_count'] for c in campaigns)
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value total">{total_campaigns}</div>
-            <div class="metric-label">Total Campaigns</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value success">{running}</div>
-            <div class="metric-label">Running</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value success">{total_success}</div>
-            <div class="metric-label">Successful</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col4:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value failed">{total_failed}</div>
-            <div class="metric-label">Failed</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # Recent Campaigns
-    st.markdown("<h3>Recent Campaigns</h3>", unsafe_allow_html=True)
-    
-    if not campaigns:
-        st.info("No campaigns yet. Create your first campaign!")
-        return
-    
-    for campaign in campaigns[:5]:
-        with st.container():
-            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-            with col1:
-                st.markdown(f"**{campaign['name']}**")
-                st.caption(campaign['form_url'][:50] + "...")
-            with col2:
-                st.caption(f"Created: {campaign['created_at'][:10]}")
-            with col3:
-                st.caption(f"Status: {campaign['status'].upper()}")
-            with col4:
-                st.caption(f"{campaign['success_count']}/{campaign['total_rows']}")
+    # ---- Section 1: Inputs ----
+    st.markdown("### 01  ·  Configuration")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
 
-def show_new_campaign():
-    st.markdown("<h2>Create New Campaign</h2>", unsafe_allow_html=True)
-    
-    # Step 1: Basic Info
-    st.markdown("### 1. Campaign Information")
-    campaign_name = st.text_input("Campaign Name", placeholder="Student Feedback Campaign")
-    form_url = st.text_input("Google Form Pre-filled Link", placeholder="https://docs.google.com/forms/d/e/.../viewform?...")
-    
-    st.divider()
-    
-    # Step 2: Data Source
-    st.markdown("### 2. Data Source")
-    source_type = st.radio("Source Type", ["Upload File", "Google Sheets URL"], horizontal=True)
-    
-    df = None
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        prefilled_link = st.text_input(
+            "Google Form Pre-filled Link",
+            placeholder="https://docs.google.com/forms/d/e/.../viewform?usp=pp_url&entry..."
+        )
+    with c2:
+        source_type = st.selectbox("Data Source", ["Upload File", "Google Sheets URL"])
+
+    df, output_path = None, "responses_output.xlsx"
+
     if source_type == "Upload File":
-        uploaded_file = st.file_uploader("Upload Data File", type=["xlsx", "csv", "tsv", "ods", "json"])
+        uploaded_file = st.file_uploader("Drop file here", type=["xlsx", "xls", "csv", "tsv", "ods", "json"])
         if uploaded_file:
             try:
-                if uploaded_file.name.endswith('.csv'):
-                    df = pd.read_csv(uploaded_file)
-                elif uploaded_file.name.endswith('.tsv'):
-                    df = pd.read_csv(uploaded_file, sep='\t')
-                else:
-                    df = pd.read_excel(uploaded_file)
-                st.success(f"✅ Loaded {len(df)} rows, {len(df.columns)} columns")
+                name = uploaded_file.name.lower()
+                if name.endswith('.csv'): df = pd.read_csv(uploaded_file)
+                elif name.endswith('.tsv'): df = pd.read_csv(uploaded_file, sep='\t')
+                elif name.endswith('.json'): df = pd.read_json(uploaded_file)
+                elif name.endswith('.ods'): df = pd.read_excel(uploaded_file, engine='odf')
+                else: df = pd.read_excel(uploaded_file)
+                output_path = uploaded_file.name
+                st.success(f"Loaded **{len(df)}** rows · **{len(df.columns)}** columns")
             except Exception as e:
-                st.error(f"Error loading file: {e}")
+                st.error(f"Error: {e}")
     else:
-        sheets_url = st.text_input("Google Sheets URL", placeholder="https://docs.google.com/spreadsheets/...")
-        if sheets_url and st.button("Connect"):
+        sheets_url = st.text_input("Google Sheets CSV Export URL", placeholder="https://docs.google.com/spreadsheets/.../export?format=csv")
+        if sheets_url and st.button("Load Sheet"):
             try:
                 resp = requests.get(sheets_url, timeout=30)
                 df = pd.read_csv(io.StringIO(resp.text))
-                st.success(f"✅ Loaded {len(df)} rows from Google Sheets")
+                st.success(f"Loaded **{len(df)}** rows")
             except Exception as e:
-                st.error(f"Error loading sheet: {e}")
-    
-    if df is not None:
-        st.session_state.df = df
-        df.columns = df.columns.str.strip()
-        
-        st.divider()
-        
-        # Step 3: Form Detection
-        st.markdown("### 3. Form Detection & Validation")
-        if st.button("🔍 Detect Form Fields"):
-            if not form_url:
-                st.error("Please enter the Google Form pre-filled link")
-            else:
-                with st.spinner("Fetching form metadata..."):
-                    field_types, options_by_entry, grid_info, questions_order = fetch_form_metadata(form_url)
-                
-                st.session_state.campaign_config['field_types'] = field_types
-                st.session_state.campaign_config['options_by_entry'] = options_by_entry
-                st.session_state.campaign_config['form_url'] = form_url.split("/viewform")[0] + "/formResponse"
-                
-                st.success(f"✅ Form detected: {len(questions_order)} fields")
-                
-                # Auto-mapping
-                prefilled_ids = extract_entry_ids(form_url)
-                non_status_cols = [c for c in df.columns if c.lower() not in {"status", "submit"}]
-                
-                if len(prefilled_ids) == len(non_status_cols):
-                    mapping = dict(zip(non_status_cols, prefilled_ids))
-                    st.session_state.campaign_config['column_mapping'] = mapping
-                    st.success(f"✅ Auto-mapped {len(mapping)} columns")
-                else:
-                    st.warning("Column count mismatch. Please map manually below.")
-                    mapping = {}
-                    for col in non_status_cols:
-                        selected = st.selectbox(f"Map `{col}` to:", ["-- Select --"] + prefilled_ids)
-                        if selected != "-- Select --":
-                            mapping[col] = selected
-                    st.session_state.campaign_config['column_mapping'] = mapping
-        
-        if 'column_mapping' in st.session_state.campaign_config:
-            st.divider()
-            
-            # Step 4: Validation
-            st.markdown("### 4. Validation & Auto-Correction")
-            if st.button("✓ Validate Data"):
-                pending_indices = df.index.tolist()
-                errors = validate_and_correct(
-                    df, pending_indices, 
-                    st.session_state.campaign_config['column_mapping'],
-                    st.session_state.campaign_config['field_types'],
-                    st.session_state.campaign_config['options_by_entry']
-                )
-                
-                if errors:
-                    st.error("Validation errors found:")
-                    for e in errors[:10]:
-                        st.write(f"• {e}")
-                else:
-                    st.success("✅ All data validated successfully")
-                    st.session_state.df = df
-            
-            st.divider()
-            
-            # Step 5: Scheduling
-            st.markdown("### 5. Schedule Submission")
-            col1, col2 = st.columns(2)
-            with col1:
-                use_random = st.checkbox("Randomize row order", value=True)
-                subset_n = st.number_input("Max rows (0 = all)", min_value=0, value=0)
-            with col2:
-                start_time = st.text_input("Start time", value="10:40")
-                end_time = st.text_input("End time", value="10:43")
-            
-            col3, col4 = st.columns(2)
-            with col3:
-                delay_min = st.number_input("Min delay (sec)", min_value=1, value=2)
-            with col4:
-                delay_max = st.number_input("Max delay (sec)", min_value=1, value=5)
-            
-            st.session_state.campaign_config.update({
-                'name': campaign_name,
-                'use_random': use_random,
-                'subset_n': subset_n,
-                'start_time': start_time,
-                'end_time': end_time,
-                'delay_min': delay_min,
-                'delay_max': delay_max
-            })
-            
-            st.divider()
-            
-            # Step 6: Launch
-            st.markdown("### 6. Launch Campaign")
-            st.warning("""
-            **⚠️ Important for Long Runs:**
-            
-            To run this campaign even when your screen is off:
-            1. Click "Download Offline Script" below
-            2. Save the `.py` file to your computer
-            3. Open terminal/command prompt
-            4. Run: `python offline_runner.py`
-            5. Configure your OS power settings to prevent sleep
-            
-            The script will continue running independently!
-            """)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("📥 Download Offline Script", type="primary", use_container_width=True):
-                    csv_data = df.to_csv(index=False)
-                    script = generate_offline_script(st.session_state.campaign_config, csv_data)
-                    
-                    st.download_button(
-                        label="💾 Save Script",
-                        data=script,
-                        file_name="offline_runner.py",
-                        mime="text/plain",
-                        use_container_width=True
-                    )
-                    
-                    # Save campaign to database
-                    campaign_data = {
-                        'id': str(hash(campaign_name + str(datetime.now()))),
-                        'name': campaign_name,
-                        'form_url': form_url,
-                        'source_type': source_type,
-                        'total_rows': len(df),
-                        'pending_count': len(df),
-                        'status': 'ready',
-                        'start_time': start_time,
-                        'end_time': end_time,
-                        'config': st.session_state.campaign_config
-                    }
-                    save_campaign(campaign_data)
-                    st.success("✅ Campaign saved! Download the script above to run offline.")
-            
-            with col2:
-                if st.button("🚀 Run in Browser", use_container_width=True):
-                    st.info("Running in browser... Keep this tab open!")
-                    run_browser_submission()
+                st.error(f"Error: {e}")
 
-def run_browser_submission():
-    config = st.session_state.campaign_config
-    df = st.session_state.df
-    
-    pending_indices = df.index.tolist()
-    if config['use_random']:
-        random.shuffle(pending_indices)
-    if config['subset_n'] > 0:
-        pending_indices = pending_indices[:config['subset_n']]
-    
-    total = len(pending_indices)
-    
-    # Initialize counters
-    success_count = 0
-    failed_count = 0
-    pending_count = total
-    
-    # Progress and Stats Container
-    progress_container = st.container()
-    
-    with progress_container:
-        # Progress Bar Section
-        st.markdown("""
-        <div class="progress-container">
-            <div class="progress-header">
-                <div class="progress-title">Submission Progress</div>
-                <div class="progress-percentage" id="progress-pct">0%</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        progress_bar = st.progress(0)
-        
-        # Statistics Cards
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            total_placeholder = st.empty()
-            total_placeholder.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value total">{total}</div>
-                <div class="metric-label">Total Rows</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with col2:
-            success_placeholder = st.empty()
-            success_placeholder.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value success">0</div>
-                <div class="metric-label">Successful</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with col3:
-            failed_placeholder = st.empty()
-            failed_placeholder.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value failed">0</div>
-                <div class="metric-label">Failed</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with col4:
-            pending_placeholder = st.empty()
-            pending_placeholder.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value pending">{total}</div>
-                <div class="metric-label">Pending</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # Submission Log
-    st.markdown("<h3>Live Submission Log</h3>", unsafe_allow_html=True)
-    log_df = pd.DataFrame(columns=["Row", "Status", "Submitted At", "HTTP Code", "Next Entry", "Gap"])
-    log_placeholder = st.empty()
-    
-    for i, idx in enumerate(pending_indices):
-        row = df.loc[idx]
-        payload = {}
-        for col, entry in config['column_mapping'].items():
-            val = normalize_value(row[col], config['field_types'].get(entry, "text"))
-            payload[entry] = val
-        
-        # Update progress
-        progress_pct = (i + 1) / total
-        progress_bar.progress(progress_pct)
-        
-        # Submit
-        try:
-            r = requests.post(config['form_url'], data=payload, timeout=30)
-            ist_now = datetime.now(IST).strftime("%d-%m-%Y %I:%M:%S %p")
-            
-            if r.status_code == 200:
-                success_count += 1
-                status_text = "Submitted"
-                
-                if i < total - 1:
-                    gap_sec = random.randint(config['delay_min'], config['delay_max'])
-                    next_time = (datetime.now(IST) + timedelta(seconds=gap_sec)).strftime("%d-%m-%Y %I:%M:%S %p IST")
-                    gap_text = format_human(gap_sec)
-                else:
-                    next_time, gap_text = "FINAL ENTRY", "-"
-            else:
-                failed_count += 1
-                status_text = f"FAILED: HTTP {r.status_code}"
-                next_time, gap_text = "-", "-"
-        except Exception as e:
-            failed_count += 1
-            ist_now = datetime.now(IST).strftime("%d-%m-%Y %I:%M:%S %p")
-            status_text = f"ERROR: {str(e)}"
-            next_time, gap_text = "-", "-"
-        
-        pending_count -= 1
-        
-        # Update statistics
-        success_placeholder.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value success">{success_count}</div>
-            <div class="metric-label">Successful</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        failed_placeholder.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value failed">{failed_count}</div>
-            <div class="metric-label">Failed</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        pending_placeholder.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value pending">{pending_count}</div>
-            <div class="metric-label">Pending</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Update log
-        new_row = {
-            "Row": idx + 1,
-            "Status": status_text,
-            "Submitted At": ist_now,
-            "HTTP Code": r.status_code if r.status_code == 200 else "Error",
-            "Next Entry": next_time,
-            "Gap": gap_text
-        }
-        log_df = pd.concat([log_df, pd.DataFrame([new_row])], ignore_index=True)
-        log_placeholder.dataframe(log_df, use_container_width=True, hide_index=True)
-        
-        # Delay
-        if i < total - 1:
-            time.sleep(random.randint(config['delay_min'], config['delay_max']))
-    
-    # Completion
-    st.balloons()
-    st.success(f"✅ Campaign completed! {success_count} rows submitted successfully.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-def show_history():
-    st.markdown("<h2>Campaign History</h2>", unsafe_allow_html=True)
-    
-    campaigns = get_all_campaigns()
-    
-    if not campaigns:
-        st.info("No campaign history yet.")
+    if df is None:
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.info("Upload a file to begin.")
         return
-    
-    for campaign in campaigns:
-        with st.expander(f"{campaign['name']} - {campaign['status'].upper()}"):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"**Form:** {campaign['form_url'][:60]}...")
-                st.write(f"**Created:** {campaign['created_at']}")
-                st.write(f"**Total Rows:** {campaign['total_rows']}")
-            with col2:
-                st.write(f"**Success:** {campaign['success_count']}")
-                st.write(f"**Failed:** {campaign['failed_count']}")
-                st.write(f"**Pending:** {campaign['pending_count']}")
+
+    df.columns = df.columns.str.strip()
+
+    # Status column
+    status_col = None
+    for col in df.columns:
+        if col.strip().lower() in {"status", "submit", "submitted"}:
+            status_col = col; break
+    if status_col is None:
+        status_col = "Status"
+        df[status_col] = ""
+
+    required_columns = map_columns(df, prefilled_link, status_col)
+
+    # ---- Section 2: Validation ----
+    st.markdown("### 02  ·  Validation & Mapping")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+
+    status_series = df[status_col].astype(str).str.lower().fillna("")
+    pending_indices = df[status_series != "submitted"].index.tolist()
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        st.markdown(f'<div class="metric"><div class="metric-value">{len(df)}</div><div class="metric-label">Total Rows</div></div>', unsafe_allow_html=True)
+    with col_b:
+        st.markdown(f'<div class="metric accent"><div class="metric-value">{len(pending_indices)}</div><div class="metric-label">Pending</div></div>', unsafe_allow_html=True)
+    with col_c:
+        st.markdown(f'<div class="metric success"><div class="metric-value">{len(required_columns)}</div><div class="metric-label">Mapped Fields</div></div>', unsafe_allow_html=True)
+
+    if st.button("🔍  Validate & Auto-Correct", use_container_width=True):
+        if not prefilled_link:
+            st.error("Please enter a pre-filled link first.")
+        elif not required_columns:
+            st.error("Could not auto-map columns. Ensure headers match entry.XXXXXX or column count matches form fields.")
+        else:
+            with st.spinner("Fetching form metadata..."):
+                field_types, options_by_entry, grid_info, questions_order = fetch_form_metadata(prefilled_link)
+
+            st.session_state['field_types'] = field_types
+            st.session_state['options_by_entry'] = options_by_entry
+
+            corrections, corr_errors = auto_correct(df, pending_indices, required_columns, field_types, options_by_entry)
+            if corrections:
+                st.success(f"Auto-corrected **{len(corrections)}** values")
+            if corr_errors:
+                st.error(f"Unable to auto-correct **{len(corr_errors)}** values")
+                for idx, col, entry, value, reason in corr_errors[:5]:
+                    st.write(f"• Row {idx+1} · `{col}` · {value} · {reason}")
+
+            errors = validate_data(df, pending_indices, required_columns, field_types, options_by_entry)
+            if errors:
+                st.error(f"Validation failed · **{len(errors)}** errors")
+                for idx, col, entry, value, reason in errors[:5]:
+                    st.write(f"• Row {idx+1} · `{col}` · {value} · {reason}")
+            else:
+                st.success("All data validated successfully ✓")
+                st.session_state['validated'] = True
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---- Section 3: Schedule ----
+    st.markdown("### 03  ·  Schedule")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+
+    now_ist = datetime.now(IST)
+    default_start = now_ist.strftime("%H:%M")
+    default_end = (now_ist + timedelta(minutes=3)).strftime("%H:%M")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        start_time_str = st.text_input("Start Time", value=default_start, help="12-hour (10:40 AM) or 24-hour (10:40)")
+    with c2:
+        end_time_str = st.text_input("End Time", value=default_end, help="12-hour (10:43 AM) or 24-hour (10:43)")
+
+    c3, c4 = st.columns(2)
+    with c3:
+        use_random = st.checkbox("Randomize row order", value=True)
+        subset_n = st.number_input("Max rows (0 = all)", min_value=0, value=0)
+    with c4:
+        delay_min = st.number_input("Min delay (sec)", min_value=1, value=2)
+        delay_max = st.number_input("Max delay (sec)", min_value=1, value=5)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
+    # ---- Launch ----
+    if st.button("⚡  Launch Campaign", type="primary", use_container_width=True):
+        if not prefilled_link or "/viewform" not in prefilled_link:
+            st.error("Valid pre-filled link is required.")
+            return
+        if 'validated' not in st.session_state:
+            st.error("Please validate data first.")
+            return
+        if not required_columns:
+            st.error("No column mapping found.")
+            return
+
+        form_url = prefilled_link.split("/viewform")[0] + "/formResponse"
+        field_types = st.session_state.get('field_types', {})
+        options_by_entry = st.session_state.get('options_by_entry', {})
+
+        if use_random: random.shuffle(pending_indices)
+        if subset_n > 0: pending_indices = pending_indices[:subset_n]
+
+        total_rows = len(pending_indices)
+        if total_rows == 0:
+            st.warning("No pending rows to submit.")
+            return
+
+        # Time window config (mirrors CSE2.ipynb configure_time_window logic)
+        min_required_sec = total_rows * MIN_SECONDS_PER_ROW
+        try:
+            start_time = parse_time_input(start_time_str)
+            end_time = parse_time_input(end_time_str)
+            today = now_ist.date()
+            start_dt = IST.localize(datetime.combine(today, start_time))
+            end_dt = IST.localize(datetime.combine(today, end_time))
+        except ValueError as e:
+            st.error(f"Time error: {e}")
+            return
+
+        if end_dt <= start_dt: end_dt += timedelta(days=1)
+        original_window_sec = int((end_dt - start_dt).total_seconds())
+
+        # Auto-swap if min > max for delay ranges
+        if delay_min > delay_max:
+            delay_min, delay_max = delay_max, delay_min
+
+        # Try up to 1000 combinations satisfying constraints
+        rs = re_val = rand_start = rand_end = window_sec = 0
+        found = False
+        for _ in range(1000):
+            rs = random.randint(delay_min, delay_max)
+            re_val = random.randint(delay_min * 2, delay_max * 2)
+            rand_start = start_dt + timedelta(seconds=rs)
+            rand_end = end_dt + timedelta(seconds=re_val)
+            if rand_end <= rand_start: rand_end = rand_start + timedelta(seconds=1)
+            window_sec = int((rand_end - rand_start).total_seconds())
+            if window_sec > original_window_sec and window_sec >= min_required_sec:
+                found = True; break
+
+        if not found:
+            # Fallback: expand end window
+            window_sec = max(total_rows + 5, original_window_sec + 10)
+            rand_start = start_dt + timedelta(seconds=delay_min)
+            rand_end = rand_start + timedelta(seconds=window_sec)
+
+        # Summary metrics
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown("### 04  ·  Execution")
+
+        m1, m2, m3, m4 = st.columns(4)
+        with m1: st.markdown(f'<div class="metric accent"><div class="metric-value">{total_rows}</div><div class="metric-label">Rows</div></div>', unsafe_allow_html=True)
+        with m2: st.markdown(f'<div class="metric"><div class="metric-value">{format_mm_ss(window_sec)}</div><div class="metric-label">Window</div></div>', unsafe_allow_html=True)
+        with m3: st.markdown(f'<div class="metric success"><div class="metric-value">{rand_start.strftime("%H:%M:%S")}</div><div class="metric-label">Start</div></div>', unsafe_allow_html=True)
+        with m4: st.markdown(f'<div class="metric warn"><div class="metric-value">{rand_end.strftime("%H:%M:%S")}</div><div class="metric-label">End</div></div>', unsafe_allow_html=True)
+
+        # Wait until start
+        now = datetime.now(IST)
+        if now < rand_start:
+            wait_sec = int((rand_start - now).total_seconds())
+            st.info(f"⏳ Waiting **{wait_sec}s** until start time...")
+            time.sleep(wait_sec)
+
+        # Execution
+        offsets = sorted(random.sample(range(1, max(window_sec, total_rows) + 1), total_rows))
+        start_ref = datetime.now(IST)
+        submitted_count = 0
+
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        log_container = st.container()
+
+        for i, (offset, idx) in enumerate(zip(offsets, pending_indices), 1):
+            target = start_ref + timedelta(seconds=offset)
+            wait_until(target)
+
+            status_code, reason = submit_row(df.loc[idx], required_columns, field_types, form_url, prefilled_link)
+            ist_now = datetime.now(IST).strftime("%H:%M:%S")
+
+            if status_code == 200:
+                df.at[idx, status_col] = "submitted"
+                submitted_count += 1
+                status_text.success(f"✅ Row {idx+1} submitted at {ist_now}")
+                if i % 5 == 0:
+                    try:
+                        if output_path.lower().endswith(('.xlsx', '.xls')): df.to_excel(output_path, index=False)
+                        else: df.to_csv(output_path, index=False)
+                    except: pass
+            else:
+                status_text.error(f"❌ Row {idx+1} failed · {reason}")
+
+            progress_bar.progress(i / total_rows)
+
+        # Final save
+        try:
+            if output_path.lower().endswith(('.xlsx', '.xls')): df.to_excel(output_path, index=False)
+            else: df.to_csv(output_path, index=False)
+        except: pass
+
+        st.balloons()
+        st.success(f"🎉 Complete · **{submitted_count}/{total_rows}** submitted")
+
+        if output_path.lower().endswith(('.xlsx', '.xls')):
+            with st.spinner("Generating analysis sheet..."):
+                generate_analysis_sheet(df, output_path, submitted_count)
+            try:
+                st.download_button(
+                    "📥  Download Updated File",
+                    data=open(output_path, 'rb').read(),
+                    file_name=output_path,
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    use_container_width=True
+                )
+            except: pass
 
 if __name__ == "__main__":
     main()
