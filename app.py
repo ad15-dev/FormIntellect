@@ -520,14 +520,19 @@ def compute_time_window(start_input, end_input, start_rand_min, start_rand_max,
 
     original_window_sec = int((end_dt - start_dt).total_seconds())
 
+    warnings = []
     if start_rand_min > start_rand_max:
-        log("WARNING: Random START seconds: min is greater than max. "
-            "Swapping the values and continuing.")
+        msg = ("Random START seconds: min is greater than max. "
+               "Swapping the values and continuing.")
+        log(f"WARNING: {msg}")
+        warnings.append(msg)
         start_rand_min, start_rand_max = start_rand_max, start_rand_min
 
     if end_rand_min > end_rand_max:
-        log("WARNING: Random END seconds: min is greater than max. "
-            "Swapping the values and continuing.")
+        msg = ("Random END seconds: min is greater than max. "
+               "Swapping the values and continuing.")
+        log(f"WARNING: {msg}")
+        warnings.append(msg)
         end_rand_min, end_rand_max = end_rand_max, end_rand_min
 
     rs = re_ = window_sec = 0
@@ -576,7 +581,13 @@ def compute_time_window(start_input, end_input, start_rand_min, start_rand_max,
     log(f"\nTotal Rows to Submit   : {total_rows}")
     log("========================================")
 
-    return rand_start, rand_end, window_sec
+    cfg = dict(
+        entered_start=start_dt, entered_end=end_dt, rs=rs, re=re_,
+        rand_start=rand_start, rand_end=rand_end,
+        original_window=original_window_sec, window=window_sec,
+        min_required=min_required_sec, total_rows=total_rows, warnings=warnings,
+    )
+    return rand_start, rand_end, window_sec, cfg
 
 
 def wait_until(target_dt, stop):
@@ -799,7 +810,14 @@ class Prepared:
     rand_start: datetime
     rand_end: datetime
     window_sec: int
-    pre_lines: list
+    pre_lines: list            # console text for the data checks
+    schedule_lines: list       # console text for the time configuration
+    inp: dict                  # the inputs this pre-flight was built from
+    summary: dict              # source / rows / link facts for the checklist
+    mapping: list              # [{Column, Entry ID, Type}]
+    corrections: list          # [{Row, Column, Field, From, To, Reason}]
+    types_detected: bool
+    time_cfg: dict
 
 
 def prepare(inp: dict, workdir: str) -> Prepared:
@@ -829,6 +847,7 @@ def prepare(inp: dict, workdir: str) -> Prepared:
     if is_google_sheets:
         output_path = os.path.join(workdir, "responses_output.xlsx")
     df.columns = df.columns.str.strip()
+    n_rows, n_cols = len(df), len(df.columns)
 
     status_col = None
     for col in df.columns:
@@ -843,6 +862,7 @@ def prepare(inp: dict, workdir: str) -> Prepared:
 
     status_series = df[status_col].astype(str).str.lower().fillna("")
     pending_indices = df[status_series != "submitted"].index.tolist()
+    pending_total = len(pending_indices)
 
     if inp["use_random"].lower() in {"y", "yes"}:
         random.shuffle(pending_indices)
@@ -876,6 +896,10 @@ def prepare(inp: dict, workdir: str) -> Prepared:
     corrections, corr_errors = auto_correct(
         df, pending_indices, required_columns, field_types, options_by_entry
     )
+    corr_rows = [dict(Row=i + 1, Column=c, Field=e, From=o, To=n, Reason=r)
+                 for i, c, e, o, n, r in corrections]
+    mapping_rows = [{"Column": col, "Entry ID": entry, "Type": field_types.get(entry, "unknown")}
+                    for col, entry in required_columns.items()]
     if corrections:
         section("AUTO-CORRECTIONS APPLIED:")
         for idx, col, entry, old_val, new_val, reason in corrections:
@@ -894,10 +918,20 @@ def prepare(inp: dict, workdir: str) -> Prepared:
 
     validate_data(df, pending_indices, required_columns, field_types, options_by_entry)
 
-    rand_start, rand_end, window_sec = compute_time_window(
+    sched_lines: list = []
+    rand_start, rand_end, window_sec, time_cfg = compute_time_window(
         inp["start"], inp["end"],
         inp["srmin"], inp["srmax"], inp["ermin"], inp["ermax"],
-        total_rows, log,
+        total_rows, sched_lines.append,
+    )
+
+    summary = dict(
+        source=("Google Sheet" if is_google_sheets else os.path.basename(file_path)),
+        is_google_sheets=is_google_sheets, rows=n_rows, cols=n_cols,
+        pending=pending_total, selected=total_rows,
+        random=inp["use_random"].lower() in {"y", "yes"},
+        entry_fields=len(extract_entry_ids(prefilled_link)),
+        validated_fields=len(required_columns),
     )
 
     return Prepared(
@@ -906,7 +940,26 @@ def prepare(inp: dict, workdir: str) -> Prepared:
         pending_indices=pending_indices, form_url=form_url,
         prefilled_link=prefilled_link, rand_start=rand_start,
         rand_end=rand_end, window_sec=window_sec, pre_lines=lines,
+        schedule_lines=sched_lines, inp=inp, summary=summary,
+        mapping=mapping_rows, corrections=corr_rows,
+        types_detected=bool(field_types), time_cfg=time_cfg,
     )
+
+
+def reroll_schedule(prep: Prepared):
+    """Draw a fresh random start/end offset without re-reading the file."""
+    lines: list = []
+    i = prep.inp
+    rs_, re_, ws, cfg = compute_time_window(
+        i["start"], i["end"], i["srmin"], i["srmax"], i["ermin"], i["ermax"],
+        prep.summary["selected"], lines.append,
+    )
+    prep.rand_start, prep.rand_end, prep.window_sec = rs_, re_, ws
+    prep.time_cfg, prep.schedule_lines = cfg, lines
+
+
+def console_text(prep: Prepared) -> str:
+    return "\n".join(prep.pre_lines + prep.schedule_lines).strip()
 
 
 # ============================================================
@@ -928,6 +981,8 @@ class Job:
         self.next_target = None
         self.error = None
         self.notified = False
+        self.t_start = None
+        self.t_end = None
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     # -- helpers -------------------------------------------------
@@ -937,6 +992,15 @@ class Job:
     @property
     def active(self):
         return self.status in ("waiting", "running")
+
+    def _finish(self, status):
+        self.t_end = time.time()       # set before status so the UI never sees a finished job without it
+        self.status = status
+
+    def elapsed(self):
+        if not self.t_start:
+            return 0
+        return int((self.t_end or time.time()) - self.t_start)
 
     def _add(self, **row):
         with self.lock:
@@ -964,9 +1028,10 @@ class Job:
                 self._note(f"Waiting until START time ({p.rand_start.strftime('%I:%M:%S %p IST')})")
                 if not wait_until(p.rand_start, self.stop):
                     self._note("PROCESS STOPPED")
-                    self.status = "stopped"
+                    self._finish("stopped")
                     return
 
+            self.t_start = time.time()
             self.status = "running"
             total_rows = self.total
             window_sec = p.window_sec
@@ -1023,20 +1088,20 @@ class Job:
             self.next_target = None
             if self.stop.is_set():
                 self._note("PROCESS STOPPED")
-                self.status = "stopped"
+                self._finish("stopped")
                 return
 
             self._note("PROCESS COMPLETED")
             self._note("Generating Analysis sheet...")
             generate_analysis_sheet(p.df, p.output_path, self.submitted, self._note)
-            self.status = "done"
+            self._finish("done")
         except Exception as exc:  # noqa: BLE001 — surface anything to the UI
             self.error = f"{type(exc).__name__}: {exc}"
-            self.status = "error"
             self._note(f"ERROR: {self.error}")
+            self._finish("error")
 
     def log_text(self):
-        lines = list(self.prep.pre_lines) + [""]
+        lines = list(self.prep.pre_lines) + list(self.prep.schedule_lines) + [""]
         with self.lock:
             lines += [r["text"] for r in self.rows]
         return "\n".join(lines)
@@ -1058,7 +1123,7 @@ html, body, .stApp, [class*="st-"]{font-family:'Inter',system-ui,sans-serif;}
 .stApp{background:var(--bg); color:var(--text);}
 header[data-testid="stHeader"]{background:transparent;}
 #MainMenu, footer{visibility:hidden;}
-.block-container{max-width:940px; padding-top:2.4rem; padding-bottom:4rem;}
+.block-container{max-width:940px; padding-top:2.2rem; padding-bottom:4rem;}
 
 /* hero */
 .fi-hero{display:flex; align-items:center; gap:14px; margin-bottom:6px;}
@@ -1066,7 +1131,24 @@ header[data-testid="stHeader"]{background:transparent;}
   display:flex; align-items:center; justify-content:center;}
 .fi-name{font-size:1.7rem; font-weight:700; letter-spacing:-0.02em; line-height:1.1;}
 .fi-name span{color:var(--green);}
-.fi-tag{color:var(--muted); font-size:.92rem; margin:2px 0 26px 52px;}
+.fi-tag{color:var(--muted); font-size:.92rem; margin:2px 0 24px 52px;}
+
+/* stepper */
+.fi-stepper{display:flex; align-items:center; gap:12px; margin:0 0 28px;}
+.fi-st{display:flex; align-items:center; gap:9px; color:var(--muted); font-size:.85rem; font-weight:500; white-space:nowrap;}
+.fi-st .n{width:26px; height:26px; border-radius:50%; border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  font-family:'JetBrains Mono',monospace; font-size:.72rem;}
+.fi-st.active{color:var(--text);}
+.fi-st.active .n{border-color:var(--green); color:var(--green); background:rgba(62,207,142,.1);}
+.fi-st.done{color:var(--text);}
+.fi-st.done .n{background:var(--green); border-color:var(--green); color:#0F0F0F; font-weight:700;}
+.fi-st-line{flex:1; height:1px; background:var(--border); min-width:14px;}
+.fi-st-line.done{background:var(--green);}
+
+/* section header */
+.fi-sec h2{font-size:1.3rem; font-weight:600; margin:0; letter-spacing:-.01em;}
+.fi-sec p{color:var(--muted); font-size:.9rem; margin:4px 0 18px;}
 
 /* cards */
 div[data-testid="stVerticalBlockBorderWrapper"]{
@@ -1083,6 +1165,12 @@ div[data-baseweb="input"]:focus-within{border-color:var(--green)!important;}
 input, textarea{color:var(--text)!important;}
 [data-testid="stFileUploaderDropzone"]{background:var(--surface2); border:1px dashed var(--border); border-radius:10px;}
 
+/* tabs */
+button[data-baseweb="tab"]{color:var(--muted); font-weight:500;}
+button[data-baseweb="tab"][aria-selected="true"]{color:var(--text);}
+div[data-baseweb="tab-highlight"]{background:var(--green)!important;}
+div[data-baseweb="tab-border"]{background:var(--border)!important;}
+
 /* buttons */
 .stButton > button, .stDownloadButton > button{
   border-radius:10px; border:1px solid var(--border); background:var(--surface2);
@@ -1093,11 +1181,24 @@ input, textarea{color:var(--text)!important;}
 .stButton > button[kind="primary"]:hover, button[data-testid="stBaseButton-primary"]:hover{
   background:var(--green-h)!important; border-color:var(--green-h)!important; color:#0F0F0F!important;}
 
+/* checklist */
+.fi-checks{background:var(--surface); border:1px solid var(--border); border-radius:12px; margin-bottom:18px;}
+.fi-check{display:flex; gap:12px; padding:12px 16px; border-top:1px solid var(--border);}
+.fi-check:first-child{border-top:none;}
+.fi-check .ic{width:20px; height:20px; border-radius:50%; flex:none; margin-top:1px;
+  display:flex; align-items:center; justify-content:center; font-size:.68rem; font-weight:700;}
+.fi-check.ok .ic{background:rgba(62,207,142,.15); color:var(--green);}
+.fi-check.warn .ic{background:rgba(245,165,36,.15); color:var(--amber);}
+.fi-check.err .ic{background:rgba(240,68,56,.15); color:var(--red);}
+.fi-check .t{font-weight:600; font-size:.88rem;}
+.fi-check .d{color:var(--muted); font-size:.8rem; margin-top:1px; word-break:break-word;}
+
 /* stats */
 .fi-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:6px 0 14px;}
 .fi-stat{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px;}
 .fi-stat-l{color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.08em;}
 .fi-stat-v{font-size:1.45rem; font-weight:600; margin-top:4px; font-family:'JetBrains Mono',monospace;}
+.fi-stat-v.sm{font-size:1.02rem;}
 .fi-stat-s{color:var(--muted); font-size:.74rem; margin-top:2px; min-height:1em;}
 .fi-stat-v.g{color:var(--green);} .fi-stat-v.r{color:var(--red);} .fi-stat-v.a{color:var(--amber);}
 .fi-bar{height:6px; background:var(--border); border-radius:99px; overflow:hidden; margin-bottom:18px;}
@@ -1124,9 +1225,15 @@ input, textarea{color:var(--text)!important;}
 .fi-row .sep{color:#555;}
 .fi-row .pill{color:var(--green); background:rgba(62,207,142,.12); border-radius:5px; padding:1px 6px;}
 
-@media (max-width:720px){ .fi-stats{grid-template-columns:repeat(2,1fr);} }
+@media (max-width:720px){
+  .fi-stats{grid-template-columns:repeat(2,1fr);}
+  .fi-st .l{display:none;} .fi-st.active .l{display:inline;}
+}
 </style>
 """
+
+STAGES = [("configure", "Configure"), ("preflight", "Pre-flight"),
+          ("execute", "Execute"), ("results", "Results")]
 
 STATUS_LABEL = {
     "waiting": ("Waiting", "a", "for start time"),
@@ -1141,9 +1248,39 @@ def esc(v):
     return html.escape(str(v))
 
 
-def stat(label, value, sub="", tone=""):
+def stat(label, value, sub="", tone="", small=False):
+    cls = f"fi-stat-v {tone} {'sm' if small else ''}"
     return (f'<div class="fi-stat"><div class="fi-stat-l">{label}</div>'
-            f'<div class="fi-stat-v {tone}">{value}</div><div class="fi-stat-s">{sub}</div></div>')
+            f'<div class="{cls}">{value}</div><div class="fi-stat-s">{sub}</div></div>')
+
+
+def stats_grid(*cards):
+    st.markdown('<div class="fi-stats">' + "".join(cards) + "</div>", unsafe_allow_html=True)
+
+
+def show_error(exc: AppError):
+    head, _, rest = str(exc).partition("\n")
+    st.error(head)
+    if rest.strip():
+        st.code(rest.strip(), language=None)
+
+
+# ---------- shared pieces ----------
+
+def stepper(stage):
+    idx = [k for k, _ in STAGES].index(stage)
+    parts = []
+    for i, (_, label) in enumerate(STAGES):
+        cls = "done" if i < idx else "active" if i == idx else ""
+        mark = "✓" if i < idx else str(i + 1)
+        parts.append(f'<div class="fi-st {cls}"><span class="n">{mark}</span><span class="l">{label}</span></div>')
+        if i < len(STAGES) - 1:
+            parts.append(f'<div class="fi-st-line {"done" if i < idx else ""}"></div>')
+    st.markdown('<div class="fi-stepper">' + "".join(parts) + "</div>", unsafe_allow_html=True)
+
+
+def section_head(title, desc):
+    st.markdown(f'<div class="fi-sec"><h2>{title}</h2><p>{desc}</p></div>', unsafe_allow_html=True)
 
 
 def row_html(r):
@@ -1173,6 +1310,173 @@ def render_table(rows):
             f'<div class="fi-tbl">{body}</div>')
 
 
+def fmt_dt(dt):
+    return dt.strftime("%I:%M:%S %p"), dt.strftime("%d-%m-%Y")
+
+
+# ============================================================
+#  SECTION 1 — CONFIGURE
+# ============================================================
+
+def view_configure():
+    saved = st.session_state.get("inp", {})
+    section_head("Configure", "Point FormIntellect at your data and form, then choose when and how fast to submit.")
+
+    with st.container(border=True):
+        st.markdown('<div class="fi-step"><b>01</b> Source</div>', unsafe_allow_html=True)
+        file_path = st.text_input(
+            "Enter file path (.xlsx/.xls/.csv/.tsv/.ods/.json or Google Sheets URL)",
+            value=saved.get("file_path", ""), key="file_path")
+        upload = st.file_uploader("…or upload the file instead",
+                                  type=["xlsx", "xls", "csv", "tsv", "ods", "json"], key="upload")
+        if not upload and saved.get("upload"):
+            st.caption(f"Using previously uploaded file: {saved['upload'][0]}")
+        link = st.text_input("Enter Google Form pre-filled link", value=saved.get("link", ""), key="link")
+
+    with st.container(border=True):
+        st.markdown('<div class="fi-step"><b>02</b> Rows</div>', unsafe_allow_html=True)
+        use_random = st.radio("Use random rows? (y/n)", ["y", "n"], horizontal=True, key="use_random",
+                              index=["y", "n"].index(saved.get("use_random", "n")))
+        subset = ""
+        if use_random == "y":
+            subset = st.text_input("How many random rows to submit? (blank = all)",
+                                   value=saved.get("subset", ""), key="subset")
+
+    with st.container(border=True):
+        st.markdown('<div class="fi-step"><b>03</b> Schedule</div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        start = c1.text_input("Start time", value=saved.get("start", ""),
+                              placeholder="09:30 AM  or  21:30", key="start")
+        end = c2.text_input("End time", value=saved.get("end", ""),
+                            placeholder="11:00 AM  or  23:00", key="end")
+        c3, c4, c5, c6 = st.columns(4)
+        srmin = c3.number_input("Random delay AFTER start (min seconds)", value=int(saved.get("srmin", 0)), step=1, key="srmin")
+        srmax = c4.number_input("Random delay AFTER start (max seconds)", value=int(saved.get("srmax", 0)), step=1, key="srmax")
+        ermin = c5.number_input("Random delay AFTER end (min seconds)", value=int(saved.get("ermin", 0)), step=1, key="ermin")
+        ermax = c6.number_input("Random delay AFTER end (max seconds)", value=int(saved.get("ermax", 0)), step=1, key="ermax")
+
+    if st.button("Run pre-flight checks  →", type="primary", width="stretch"):
+        if not start.strip() or not end.strip():
+            st.error("Start time and End time are required.")
+            return
+        inp = dict(
+            file_path=file_path,
+            upload=(upload.name, upload.getvalue()) if upload else saved.get("upload"),
+            link=link, use_random=use_random, subset=subset, start=start, end=end,
+            srmin=int(srmin), srmax=int(srmax), ermin=int(ermin), ermax=int(ermax),
+        )
+        st.session_state.inp = inp          # survives "Back to configure"
+        try:
+            with st.spinner("Running pre-flight checks…"):
+                st.session_state.prep = prepare(inp, st.session_state.workdir)
+            st.rerun()
+        except AppError as exc:
+            show_error(exc)
+
+
+# ============================================================
+#  SECTION 2 — PRE-FLIGHT
+# ============================================================
+
+def build_checks(prep: Prepared):
+    s, cfg = prep.summary, prep.time_cfg
+    checks = []
+    src = f'{esc(s["source"])} · {s["rows"]} rows · {s["cols"]} columns · {s["pending"]} pending'
+    if s["is_google_sheets"]:
+        src += " · read-only (updates saved locally)"
+    checks.append(("ok", "Source loaded", src))
+    checks.append(("ok", "Rows selected",
+                   f'Random selection: {s["selected"]} of {s["pending"]} pending rows' if s["random"]
+                   else f'All {s["selected"]} pending rows'))
+    checks.append(("ok", "Pre-filled link", f'{s["entry_fields"]} entry fields found in the link'))
+    checks.append(("ok", "Column mapping", f'{len(prep.mapping)} columns mapped to form entry IDs'))
+    if prep.types_detected:
+        checks.append(("ok", "Form fields", "Field types and allowed options read from the live form"))
+    else:
+        checks.append(("warn", "Form fields", "Could not detect field types — continuing with data checks"))
+    if prep.corrections:
+        checks.append(("warn", "Auto-corrections",
+                       f"{len(prep.corrections)} value(s) normalized and saved to the file"))
+    else:
+        checks.append(("ok", "Auto-corrections", "None needed"))
+    checks.append(("ok", "Data validation",
+                   f'{s["selected"]} rows × {s["validated_fields"]} fields passed'))
+    sched = (f'Final window {format_mm_ss(cfg["window"])} (original {format_mm_ss(cfg["original_window"])}) '
+             f'· minimum required {format_human(cfg["min_required"])}')
+    if datetime.now(IST) >= prep.rand_start:
+        checks.append(("warn", "Schedule", sched + " · start time has already passed — submissions begin immediately"))
+    else:
+        checks.append(("ok", "Schedule", sched))
+    return checks
+
+
+def view_preflight(prep: Prepared):
+    section_head("Pre-flight", "Review every check before anything is sent. Nothing has been submitted yet.")
+
+    icons = {"ok": "✓", "warn": "!", "err": "✕"}
+    rows = "".join(
+        f'<div class="fi-check {k}"><span class="ic">{icons[k]}</span>'
+        f'<div><div class="t">{t}</div><div class="d">{d}</div></div></div>'
+        for k, t, d in build_checks(prep))
+    st.markdown(f'<div class="fi-checks">{rows}</div>', unsafe_allow_html=True)
+
+    t_map, t_fix, t_sched, t_console = st.tabs(
+        ["Field mapping", "Auto-corrections", "Schedule", "Console"])
+
+    with t_map:
+        st.dataframe(pd.DataFrame(prep.mapping), hide_index=True, width="stretch")
+
+    with t_fix:
+        if prep.corrections:
+            st.dataframe(pd.DataFrame(prep.corrections), hide_index=True, width="stretch")
+        else:
+            st.caption("No values needed correcting.")
+
+    with t_sched:
+        cfg = prep.time_cfg
+        for w in cfg["warnings"]:
+            st.warning(w)
+        es, ee = fmt_dt(cfg["entered_start"]), fmt_dt(cfg["entered_end"])
+        rs, re_ = fmt_dt(cfg["rand_start"]), fmt_dt(cfg["rand_end"])
+        stats_grid(
+            stat("Entered start", es[0], es[1], small=True),
+            stat("Entered end", ee[0], ee[1], small=True),
+            stat("Randomized start", rs[0], f'{rs[1]} · +{cfg["rs"]}s', "g", small=True),
+            stat("Randomized end", re_[0], f'{re_[1]} · +{cfg["re"]}s', "g", small=True),
+        )
+        avg = cfg["window"] / max(cfg["total_rows"], 1)
+        stats_grid(
+            stat("Original window", format_mm_ss(cfg["original_window"]), "MM:SS", small=True),
+            stat("Final window", format_mm_ss(cfg["window"]), "MM:SS", "g", small=True),
+            stat("Rows to submit", cfg["total_rows"], f'min window {format_human(cfg["min_required"])}', small=True),
+            stat("Average gap", format_human(avg), "between entries", small=True),
+        )
+        if st.button("Re-roll schedule", help="Draw a new random start/end offset"):
+            try:
+                reroll_schedule(prep)
+                st.rerun()
+            except AppError as exc:
+                show_error(exc)
+
+    with t_console:
+        st.code(console_text(prep), language=None)
+
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+    b1, b2 = st.columns([1, 2])
+    if b1.button("←  Back to configure", width="stretch"):
+        st.session_state.prep = None
+        st.rerun()
+    if b2.button("Start submission  →", type="primary", width="stretch"):
+        job = Job(prep)
+        job.start()
+        st.session_state.job = job
+        st.rerun()
+
+
+# ============================================================
+#  SECTION 3 — EXECUTE
+# ============================================================
+
 def render_monitor(job: Job):
     s = job.snapshot()
     label, tone, sub = STATUS_LABEL[s["status"]]
@@ -1201,7 +1505,70 @@ def render_monitor(job: Job):
             job.stop.set()
     elif not job.notified:
         job.notified = True
-        st.rerun()                      # one full rerun to swap in the final layout
+        st.rerun()                      # one full rerun to move on to Results
+
+
+def view_execute(job: Job):
+    section_head("Execute", "Submissions are running in the background. You can watch each entry land below.")
+    monitor = st.fragment(run_every=1)(render_monitor)
+    monitor(job)
+    with st.expander("Pre-flight console", expanded=False):
+        st.code(console_text(job.prep), language=None)
+
+
+# ============================================================
+#  SECTION 4 — RESULTS
+# ============================================================
+
+def view_results(job: Job):
+    s = job.snapshot()
+    section_head("Results", "Run summary, the full execution table, and your updated files.")
+
+    if s["status"] == "error":
+        st.error(s["error"])
+    elif s["status"] == "stopped":
+        st.warning("Run stopped before all rows were submitted. Already-submitted rows are marked in the "
+                   "updated file — use it as your source next time to continue with only the pending rows.")
+    elif s["failed"]:
+        st.warning(f'{s["failed"]} row(s) failed. They remain pending in the updated file.')
+
+    stats_grid(
+        stat("Submitted", f'{s["submitted"]}<span style="color:#666"> / {s["total"]}</span>', "", "g"),
+        stat("Failed", s["failed"], "", "r" if s["failed"] else ""),
+        stat("Status", STATUS_LABEL[s["status"]][0], STATUS_LABEL[s["status"]][2], STATUS_LABEL[s["status"]][1]),
+        stat("Run time", format_human(job.elapsed()), "from first submission"),
+    )
+    st.markdown(render_table(s["rows"]), unsafe_allow_html=True)
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+
+    d1, d2, d3 = st.columns(3)
+    out = job.prep.output_path
+    if os.path.exists(out):
+        with open(out, "rb") as fh:
+            d1.download_button("Download updated file", fh.read(),
+                               file_name=os.path.basename(out), width="stretch")
+    d2.download_button("Download execution log", job.log_text(),
+                       file_name="formintellect_log.txt", width="stretch")
+    if d3.button("New run", type="primary", width="stretch"):
+        st.session_state.pop("job", None)
+        st.session_state.pop("prep", None)
+        st.rerun()
+
+    if s["status"] == "done":
+        st.caption("The updated workbook includes an “Analysis” sheet with per-question counts and charts.")
+    with st.expander("Pre-flight console", expanded=False):
+        st.code(console_text(job.prep), language=None)
+
+
+# ============================================================
+#  APP
+# ============================================================
+
+def current_stage():
+    job = st.session_state.get("job")
+    if job:
+        return "execute" if job.active else "results"
+    return "preflight" if st.session_state.get("prep") else "configure"
 
 
 def main():
@@ -1210,8 +1577,6 @@ def main():
 
     if "workdir" not in st.session_state:
         st.session_state.workdir = tempfile.mkdtemp(prefix="formintellect_")
-    job: Job | None = st.session_state.get("job")
-    locked = bool(job and job.active)
 
     st.markdown(
         '<div class="fi-hero"><div class="fi-logo"><svg viewBox="0 0 24 24" width="20" height="20" '
@@ -1222,80 +1587,17 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # ---------------- inputs (same prompts as the original script) ----------------
-    with st.container(border=True):
-        st.markdown('<div class="fi-step"><b>01</b> Source</div>', unsafe_allow_html=True)
-        file_path = st.text_input(
-            "Enter file path (.xlsx/.xls/.csv/.tsv/.ods/.json or Google Sheets URL)",
-            key="file_path", disabled=locked)
-        upload = st.file_uploader(
-            "…or upload the file instead", type=["xlsx", "xls", "csv", "tsv", "ods", "json"],
-            key="upload", disabled=locked)
-        link = st.text_input("Enter Google Form pre-filled link", key="link", disabled=locked)
+    stage = current_stage()
+    stepper(stage)
 
-    with st.container(border=True):
-        st.markdown('<div class="fi-step"><b>02</b> Rows</div>', unsafe_allow_html=True)
-        use_random = st.radio("Use random rows? (y/n)", ["y", "n"], index=1, horizontal=True,
-                              key="use_random", disabled=locked)
-        subset = ""
-        if use_random == "y":
-            subset = st.text_input("How many random rows to submit? (blank = all)",
-                                   key="subset", disabled=locked)
-
-    with st.container(border=True):
-        st.markdown('<div class="fi-step"><b>03</b> Schedule</div>', unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        start = c1.text_input("Start time", placeholder="09:30 AM  or  21:30", key="start", disabled=locked)
-        end = c2.text_input("End time", placeholder="11:00 AM  or  23:00", key="end", disabled=locked)
-        c3, c4, c5, c6 = st.columns(4)
-        srmin = c3.number_input("Random delay AFTER start (min seconds)", value=0, step=1, key="srmin", disabled=locked)
-        srmax = c4.number_input("Random delay AFTER start (max seconds)", value=0, step=1, key="srmax", disabled=locked)
-        ermin = c5.number_input("Random delay AFTER end (min seconds)", value=0, step=1, key="ermin", disabled=locked)
-        ermax = c6.number_input("Random delay AFTER end (max seconds)", value=0, step=1, key="ermax", disabled=locked)
-
-    if st.button("Start submission", type="primary", disabled=locked, use_container_width=True):
-        if not start.strip() or not end.strip():
-            st.error("Start time and End time are required.")
-        else:
-            inp = dict(
-                file_path=file_path, upload=(upload.name, upload.getvalue()) if upload else None,
-                link=link, use_random=use_random, subset=subset, start=start, end=end,
-                srmin=int(srmin), srmax=int(srmax), ermin=int(ermin), ermax=int(ermax),
-            )
-            try:
-                with st.spinner("Running preflight checks…"):
-                    prep = prepare(inp, st.session_state.workdir)
-                job = Job(prep)
-                job.start()
-                st.session_state.job = job
-                st.rerun()
-            except AppError as exc:
-                head, _, rest = str(exc).partition("\n")
-                st.error(head)
-                if rest.strip():
-                    st.code(rest.strip(), language=None)
-
-    # ---------------- monitor ----------------
-    if job:
-        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-        with st.expander("Preflight checks", expanded=False):
-            st.code("\n".join(job.prep.pre_lines).strip(), language=None)
-
-        monitor = st.fragment(run_every=1 if job.active else None)(render_monitor)
-        monitor(job)
-
-        if not job.active:
-            d1, d2, d3 = st.columns([1, 1, 1])
-            out = job.prep.output_path
-            if os.path.exists(out):
-                with open(out, "rb") as fh:
-                    d1.download_button("Download updated file", fh.read(),
-                                       file_name=os.path.basename(out), use_container_width=True)
-            d2.download_button("Download execution log", job.log_text(),
-                               file_name="formintellect_log.txt", use_container_width=True)
-            if d3.button("New run", use_container_width=True):
-                del st.session_state["job"]
-                st.rerun()
+    if stage == "configure":
+        view_configure()
+    elif stage == "preflight":
+        view_preflight(st.session_state.prep)
+    elif stage == "execute":
+        view_execute(st.session_state.job)
+    else:
+        view_results(st.session_state.job)
 
 
 main()
