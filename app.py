@@ -1,8 +1,3 @@
-Here is the complete, single-file code. It contains everything (UI, logic, CSS) in one file, so you don't have to worry about import errors or file structures. 
-
-Simply delete all files except `app.py` (and `requirements.txt`), and paste this entire code into **`app.py`**.
-
-```python
 """
 FormIntellect — Google Form submission scheduler.
 Single-file version for Streamlit Cloud.
@@ -47,10 +42,6 @@ BLANK = "NA"
 SAVE_EVERY_SEC = 3
 ALLOW_LOCAL_PATHS = os.environ.get("FORMINTELLECT_ALLOW_LOCAL_PATHS") == "1"
 SUPPORTED_EXT = (".xlsx", ".xls", ".csv", ".tsv", ".ods", ".json")
-
-# ============================================================
-#  CSS & UI HELPERS
-# ============================================================
 
 CSS = """
 :root{
@@ -284,10 +275,6 @@ def format_human(seconds):
 
 def fmt_clock(dt): return dt.strftime("%I:%M:%S %p").lstrip("0")
 
-# ============================================================
-#  ERRORS & DATA LOADING
-# ============================================================
-
 @dataclass
 class Problem:
     row: int | None
@@ -394,10 +381,6 @@ def save_dataframe(df, file_path):
     elif lower == ".ods": df.to_excel(tmp, index=False, engine="odf")
     else: df.to_csv(tmp, index=False)
     os.replace(tmp, file_path)
-
-# ============================================================
-#  FORM METADATA & VALIDATION
-# ============================================================
 
 def extract_entry_ids(prefilled_link):
     parsed = urllib.parse.urlparse(prefilled_link)
@@ -582,10 +565,6 @@ def validate_data(df, pending_indices, required_columns, form: FormInfo):
                 if bad: problems.append(Problem(sheet_row(idx), col, value, "Answer not in choices.", f"Use: {_opts_hint(opts)}."))
     return problems
 
-# ============================================================
-#  SCHEDULING & SUBMISSION
-# ============================================================
-
 def base_window(start_t, end_t):
     today = datetime.now(IST).date()
     start_dt = IST.localize(datetime.combine(today, start_t))
@@ -746,10 +725,6 @@ def generate_analysis_sheet(df, file_path, submitted_count, log):
         current_row += 2
     wb.save(file_path)
     log("Analysis sheet added.")
-
-# ============================================================
-#  PREPARATION & JOB
-# ============================================================
 
 @dataclass
 class Prepared:
@@ -912,10 +887,6 @@ class Job:
             rows = [dict(**{"Sheet row": f["row"], "Time (IST)": f["time"], "What went wrong": f["problem"], "What to do": f["fix"], "Technical detail": f["technical"]}) for f in self.failures]
         return pd.DataFrame(rows).to_csv(index=False)
 
-# ============================================================
-#  UI VIEWS
-# ============================================================
-
 def schedule_preview(start_t, end_t, srange, erange):
     s, e = base_window(start_t, end_t)
     s_lo, s_hi = s + timedelta(seconds=min(srange)), s + timedelta(seconds=max(srange))
@@ -1017,7 +988,7 @@ def view_preflight(prep: Prepared):
     section_head("Check before sending", "Everything passed. Nothing sent yet.")
     cfg = prep.time_cfg
     callout("ok", f"<b>Ready to send {cfg['total_rows']} row(s)</b> between <b>{fmt_clock(prep.rand_start)}</b> and <b>{fmt_clock(prep.rand_end)}</b> IST.")
-    icons = {"ok": "✓", "warn": "!", "err": "✕"}
+    icons = {"ok": "✓", "warn": "!", "err": ""}
     rows = "".join(f'<div class="fi-check {k}"><span class="ic">{icons[k]}</span><div><div class="t">{esc(t)}</div><div class="d">{esc(d)}</div></div></div>' for k, t, d in build_checks(prep))
     md(f'<div class="fi-checks">{rows}</div>')
     t_map, t_fix, t_sched, t_console = st.tabs(["Column matching", "Auto-fixes", "Schedule", "Full log"])
@@ -1118,10 +1089,6 @@ def view_results(job: Job):
     if s["status"] == "done" and out.lower().endswith(".xlsx"): st.caption("Updated workbook includes 'Analysis' sheet.")
     with st.expander("Check log", expanded=False): st.code(console_text(job.prep), language=None)
 
-# ============================================================
-#  MAIN APP
-# ============================================================
-
 def current_stage():
     job = st.session_state.get("job")
     if job: return "execute" if job.active else "results"
@@ -1147,4 +1114,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
