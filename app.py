@@ -1,6 +1,6 @@
 """
-FormIntellect — Google Form submission scheduler.
-Single-file version for Streamlit Cloud.
+FormIntellect — Professional Google Form submission scheduler.
+Single-file version with polished UI.
 """
 from __future__ import annotations
 
@@ -43,222 +43,878 @@ SAVE_EVERY_SEC = 3
 ALLOW_LOCAL_PATHS = os.environ.get("FORMINTELLECT_ALLOW_LOCAL_PATHS") == "1"
 SUPPORTED_EXT = (".xlsx", ".xls", ".csv", ".tsv", ".ods", ".json")
 
+# ============================================================
+#  PROFESSIONAL CSS
+# ============================================================
+
 CSS = """
-:root{
-  --bg:#0B0D10; --surface:#14171C; --surface2:#0F1216; --border:#252A31; --border2:#323843;
-  --text:#ECEEF1; --muted:#9AA3AE; --faint:#6B7480;
-  --green:#3ECF8E; --green-h:#2EB87A; --green-bg:rgba(62,207,142,.10);
-  --red:#F97066; --red-bg:rgba(249,112,102,.08);
-  --amber:#F5B544; --amber-bg:rgba(245,181,68,.08);
-  --blue:#6CB6FF; --blue-bg:rgba(108,182,255,.08);
-}
-html, body, .stApp, [class*="st-"]{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;}
-.stApp{background:radial-gradient(1200px 500px at 50% -200px, rgba(62,207,142,.07), transparent 70%), var(--bg); color:var(--text);}
-.stApp p, .stApp li, .stApp label, .stMarkdown{color:var(--text);}
-header[data-testid="stHeader"]{background:transparent;}
-#MainMenu, footer{visibility:hidden;}
-.block-container{max-width:960px; padding-top:2rem; padding-bottom:4rem;}
-[data-testid="stCaptionContainer"], .stCaption{color:var(--muted)!important;}
-
-/* Upload button styling */
-[data-testid="stFileUploaderDropzone"]{
-  background:var(--surface2)!important; 
-  border:2px dashed var(--border2)!important; 
-  border-radius:12px!important;
-  padding:2rem 1rem!important;
-  transition:all .2s ease;
-}
-[data-testid="stFileUploaderDropzone"]:hover{
-  border-color:var(--green)!important;
-  background:rgba(62,207,142,.05)!important;
-}
-[data-testid="stFileUploaderDropzone"] [data-testid="stBaseButton-secondary"]{
-  background:var(--green)!important;
-  color:#0B0D10!important;
-  border:none!important;
-  font-weight:600!important;
-  padding:.5rem 1rem!important;
-  border-radius:8px!important;
-}
-[data-testid="stFileUploaderDropzone"] [data-testid="stBaseButton-secondary"]:hover{
-  background:var(--green-h)!important;
-}
-[data-testid="stFileUploaderDropzone"] p{color:var(--muted)!important;}
-[data-testid="stFileUploaderDropzone"] small{color:var(--faint)!important;}
-
-/* Expander styling */
-[data-testid="stExpander"]{
-  background:var(--surface)!important;
-  border:1px solid var(--border)!important;
-  border-radius:12px!important;
-  margin:1rem 0!important;
-}
-[data-testid="stExpander"] summary{
-  background:var(--surface2)!important;
-  padding:1rem 1.25rem!important;
-  border-radius:12px!important;
-  cursor:pointer!important;
-}
-[data-testid="stExpander"] summary p{
-  color:var(--text)!important;
-  font-weight:600!important;
-  font-size:.95rem!important;
-  margin:0!important;
-}
-[data-testid="stExpander"] .streamlit-expanderContent{
-  background:var(--surface)!important;
-  padding:1.25rem!important;
-  border-top:1px solid var(--border)!important;
-}
-[data-testid="stExpander"] .streamlit-expanderContent p{
-  color:var(--muted)!important;
-  line-height:1.7!important;
-  margin-bottom:.75rem!important;
-}
-[data-testid="stExpander"] .streamlit-expanderContent strong{
-  color:var(--green)!important;
-  font-weight:600!important;
+:root {
+  --bg-primary: #0a0e1a;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --bg-card: #1a2332;
+  --border-color: #2d3748;
+  --border-light: #3d4a5c;
+  --text-primary: #f7fafc;
+  --text-secondary: #a0aec0;
+  --text-muted: #718096;
+  --accent-green: #10b981;
+  --accent-green-hover: #059669;
+  --accent-green-bg: rgba(16, 185, 129, 0.1);
+  --accent-blue: #3b82f6;
+  --accent-blue-bg: rgba(59, 130, 246, 0.1);
+  --accent-red: #ef4444;
+  --accent-red-bg: rgba(239, 68, 68, 0.1);
+  --accent-amber: #f59e0b;
+  --accent-amber-bg: rgba(245, 158, 11, 0.1);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 }
 
-.fi-hero{display:flex; align-items:center; gap:14px; margin-bottom:4px;}
-.fi-logo{width:40px; height:40px; border-radius:11px; background:linear-gradient(135deg,#3ECF8E,#22A06B);
-  display:flex; align-items:center; justify-content:center; box-shadow:0 6px 24px rgba(62,207,142,.25);
-  color:#0B0D10; font-size:1.3rem; font-weight:800;}
-.fi-name{font-size:1.75rem; font-weight:700; letter-spacing:-0.02em; line-height:1.1;}
-.fi-name span{color:var(--green);}
-.fi-tag{color:var(--muted); font-size:.93rem; margin:4px 0 26px 54px;}
-.fi-stepper{display:flex; align-items:center; gap:12px; margin:0 0 30px; padding:14px 18px;
-  background:var(--surface); border:1px solid var(--border); border-radius:14px;}
-.fi-st{display:flex; align-items:center; gap:9px; color:var(--faint); font-size:.86rem; font-weight:500; white-space:nowrap;}
-.fi-st .n{width:28px; height:28px; border-radius:50%; border:1px solid var(--border2);
-  display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.74rem;}
-.fi-st .l small{display:block; color:var(--faint); font-size:.7rem; font-weight:400;}
-.fi-st.active{color:var(--text);}
-.fi-st.active .n{border-color:var(--green); color:var(--green); background:var(--green-bg); box-shadow:0 0 0 4px rgba(62,207,142,.08);}
-.fi-st.done{color:var(--text);}
-.fi-st.done .n{background:var(--green); border-color:var(--green); color:#0B0D10; font-weight:700;}
-.fi-st-line{flex:1; height:2px; background:var(--border); min-width:14px; border-radius:2px;}
-.fi-st-line.done{background:var(--green);}
-.fi-sec h2{font-size:1.35rem; font-weight:650; margin:0; letter-spacing:-.01em; color:var(--text);}
-.fi-sec p{color:var(--muted); font-size:.92rem; margin:6px 0 20px;}
-div[data-testid="stVerticalBlockBorderWrapper"]{background:var(--surface); border:1px solid var(--border)!important; border-radius:16px;}
-.fi-step{display:flex; align-items:center; gap:12px; margin-bottom:2px;}
-.fi-step b{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.72rem; font-weight:500;
-  color:var(--green); background:var(--green-bg); border:1px solid rgba(62,207,142,.3); border-radius:7px; padding:3px 8px;}
-.fi-step .t{font-weight:600; font-size:1rem;}
-.fi-step-d{color:var(--muted); font-size:.84rem; margin:0 0 10px 46px;}
-[data-testid="stWidgetLabel"] p{color:var(--muted)!important; font-size:.82rem!important; font-weight:500;}
-div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="select"] > div, div[data-baseweb="textarea"]{
-  background:var(--surface2)!important; border-color:var(--border2)!important; border-radius:10px!important;}
-div[data-baseweb="input"]:focus-within{border-color:var(--green)!important;}
-input, textarea{color:var(--text)!important;}
-div[role="radiogroup"] label p{color:var(--text)!important; font-size:.9rem!important;}
-[data-testid="stSlider"] [role="slider"]{background:var(--green)!important; border-color:var(--green)!important;}
-[data-testid="stTickBarMin"], [data-testid="stTickBarMax"], [data-testid="stSliderThumbValue"]{color:var(--muted)!important;}
-button[data-baseweb="tab"]{color:var(--muted); font-weight:500;}
-button[data-baseweb="tab"][aria-selected="true"]{color:var(--text);}
-div[data-baseweb="tab-highlight"]{background:var(--green)!important;}
-div[data-baseweb="tab-border"]{background:var(--border)!important;}
-[data-testid="stCode"] pre, .stCode pre{background:var(--surface2)!important; border:1px solid var(--border); border-radius:10px;}
-[data-testid="stCode"] code{color:#C9D1D9!important;}
-.stButton > button, .stDownloadButton > button{
-  border-radius:10px; border:1px solid var(--border2); background:var(--surface);
-  color:var(--text); font-weight:600; padding:.6rem 1.1rem; transition:all .15s ease;}
-.stButton > button:hover, .stDownloadButton > button:hover{border-color:var(--green); color:var(--green);}
-.stButton > button[kind="primary"], button[data-testid="stBaseButton-primary"], div[data-baseweb="button"] button[kind="primary"] {
-  background:var(--green)!important; border-color:var(--green)!important; color:#0B0D10!important;}
-.stButton > button[kind="primary"]:hover, button[data-testid="stBaseButton-primary"]:hover, div[data-baseweb="button"] button[kind="primary"]:hover {
-  background:var(--green-h)!important; border-color:var(--green-h)!important; color:#0B0D10!important;}
-.fi-call{display:flex; gap:12px; padding:14px 16px; border-radius:12px; border:1px solid; margin:6px 0 16px; font-size:.9rem; line-height:1.5;}
-.fi-call .ic{width:22px; height:22px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; font-size:.72rem; font-weight:700; margin-top:1px;}
-.fi-call b{font-weight:600;}
-.fi-call.info{background:var(--blue-bg); border-color:rgba(108,182,255,.3);} .fi-call.info .ic{background:rgba(108,182,255,.18); color:var(--blue);}
-.fi-call.ok{background:var(--green-bg); border-color:rgba(62,207,142,.3);} .fi-call.ok .ic{background:rgba(62,207,142,.18); color:var(--green);}
-.fi-call.warn{background:var(--amber-bg); border-color:rgba(245,181,68,.3);} .fi-call.warn .ic{background:rgba(245,181,68,.18); color:var(--amber);}
-.fi-call.err{background:var(--red-bg); border-color:rgba(249,112,102,.3);} .fi-call.err .ic{background:rgba(249,112,102,.18); color:var(--red);}
-.fi-err{background:var(--red-bg); border:1px solid rgba(249,112,102,.35); border-radius:16px; padding:18px 20px; margin:16px 0 12px;}
-.fi-err-h{display:flex; gap:12px; align-items:flex-start;}
-.fi-err-h .ic{width:30px; height:30px; border-radius:50%; background:rgba(249,112,102,.2); color:var(--red);
-  font-weight:700; display:flex; align-items:center; justify-content:center; flex:none;}
-.fi-err .t{font-weight:650; font-size:1.05rem; color:var(--text);}
-.fi-err .w{color:var(--muted); font-size:.82rem; margin-top:3px;}
-.fi-err .w span{color:var(--red); font-weight:500;}
-.fi-err-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;}
-.fi-err-box{background:rgba(0,0,0,.18); border:1px solid var(--border); border-radius:12px; padding:12px 14px;}
-.fi-err-box .k{font-size:.7rem; text-transform:uppercase; letter-spacing:.09em; color:var(--muted); margin-bottom:5px;}
-.fi-err-box .v{font-size:.9rem; line-height:1.55; color:var(--text);}
-.fi-err-box.fix{border-color:rgba(62,207,142,.3);} .fi-err-box.fix .k{color:var(--green);}
-.fi-checks{background:var(--surface); border:1px solid var(--border); border-radius:14px; margin-bottom:18px;}
-.fi-check{display:flex; gap:12px; padding:13px 16px; border-top:1px solid var(--border);}
-.fi-check:first-child{border-top:none;}
-.fi-check .ic{width:22px; height:22px; border-radius:50%; flex:none; margin-top:1px;
-  display:flex; align-items:center; justify-content:center; font-size:.7rem; font-weight:700;}
-.fi-check.ok .ic{background:rgba(62,207,142,.15); color:var(--green);}
-.fi-check.warn .ic{background:rgba(245,181,68,.15); color:var(--amber);}
-.fi-check.err .ic{background:rgba(249,112,102,.15); color:var(--red);}
-.fi-check .t{font-weight:600; font-size:.9rem;}
-.fi-check .d{color:var(--muted); font-size:.82rem; margin-top:2px; word-break:break-word;}
-.fi-tw{border:1px solid var(--border); border-radius:12px; overflow:auto; max-height:440px; background:var(--surface); margin:6px 0 12px;}
-.fi-table{width:100%; border-collapse:collapse; font-size:.85rem;}
-.fi-table th{position:sticky; top:0; text-align:left; color:var(--muted); font-weight:500; font-size:.72rem;
-  text-transform:uppercase; letter-spacing:.06em; padding:10px 12px; border-bottom:1px solid var(--border); background:var(--surface2);}
-.fi-table td{padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top; color:var(--text); line-height:1.45;}
-.fi-table tr:last-child td{border-bottom:none;}
-.fi-table td.row{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--red); white-space:nowrap;}
-.fi-table td.val{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:#FFC2BC;}
-.fi-table td.fix{color:#B7F0D4;}
-.fi-table td.mono{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.8rem; color:var(--muted);}
-.fi-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:6px 0 14px;}
-.fi-stat{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px;}
-.fi-stat-l{color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.08em;}
-.fi-stat-v{font-size:1.5rem; font-weight:600; margin-top:4px; font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
-.fi-stat-v.sm{font-size:1.04rem;}
-.fi-stat-s{color:var(--muted); font-size:.75rem; margin-top:2px; min-height:1em;}
-.fi-stat-v.g{color:var(--green);} .fi-stat-v.r{color:var(--red);} .fi-stat-v.a{color:var(--amber);}
-.fi-bar{height:8px; background:var(--border); border-radius:99px; overflow:hidden; margin-bottom:18px; display:flex;}
-.fi-bar > .ok{height:100%; background:var(--green); transition:width .4s ease;}
-.fi-bar > .bad{height:100%; background:var(--red); transition:width .4s ease;}
-.fi-tbl-h{display:flex; justify-content:space-between; align-items:center; margin:4px 0 8px;
-  font-size:.76rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);}
-.fi-tbl{display:flex; flex-direction:column-reverse; max-height:440px; overflow-y:auto;
-  background:var(--surface2); border:1px solid var(--border); border-radius:12px;}
-.fi-row{font-size:.84rem; line-height:1.5; padding:10px 14px 10px 32px; border-top:1px solid var(--border);
-  position:relative; color:var(--text); word-break:break-word;}
-.fi-row:last-child{border-top:none;}
-.fi-row::before{content:''; position:absolute; left:14px; top:17px; width:8px; height:8px; border-radius:50%; background:var(--green);}
-.fi-row.final::before{box-shadow:0 0 0 3px rgba(62,207,142,.25);}
-.fi-row.fail{background:var(--red-bg);}
-.fi-row.fail::before{background:var(--red);}
-.fi-row.note::before{background:var(--faint);}
-.fi-row.note, .fi-row.empty{color:var(--muted);}
-.fi-row .r{font-weight:600;}
-.fi-row .k{color:var(--muted);}
-.fi-row .m{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.8rem;}
-.fi-row .why{display:block; color:#FFC2BC; margin-top:3px;}
-.fi-row .todo{display:block; color:#B7F0D4; margin-top:2px;}
-.fi-row .pill{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.74rem; color:var(--green); background:var(--green-bg); border-radius:6px; padding:1px 7px; margin-left:6px;}
-.fi-row.fail .pill{color:var(--red); background:rgba(249,112,102,.12);}
-.fi-prev{display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; background:var(--surface2);
-  border:1px solid var(--border); border-radius:12px; padding:12px 16px; margin-top:8px;}
-.fi-prev .k{font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em;}
-.fi-prev .v{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.95rem; margin-top:2px;}
-.fi-prev .arrow{color:var(--faint); font-size:1.2rem;}
-@media (max-width:720px){
-  .fi-stats{grid-template-columns:repeat(2,1fr);}
-  .fi-err-grid{grid-template-columns:1fr;}
-  .fi-st .l{display:none;} .fi-st.active .l{display:inline;}
-  .fi-tag{margin-left:0;}
-}"""
+* {
+  box-sizing: border-box;
+}
 
-STAGES = [("configure", "Set up", "data, form, timing"), ("preflight", "Check", "review before sending"),
-          ("execute", "Send", "live progress"), ("results", "Results", "summary & files")]
+html, body, .stApp {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.stApp {
+  background: linear-gradient(135deg, var(--bg-primary) 0%, #0f1729 100%);
+}
+
+.stApp p, .stApp li, .stApp label, .stMarkdown {
+  color: var(--text-primary);
+}
+
+header[data-testid="stHeader"] {
+  background: transparent;
+}
+
+#MainMenu, footer {
+  visibility: hidden;
+}
+
+.block-container {
+  max-width: 1000px;
+  padding: 2rem 1rem;
+}
+
+[data-testid="stCaptionContainer"], .stCaption {
+  color: var(--text-muted) !important;
+  font-size: 0.85rem;
+}
+
+/* Hero Section */
+.fi-hero {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+}
+
+.fi-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-green-hover) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.fi-name {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.fi-name span {
+  color: var(--accent-green);
+}
+
+.fi-tag {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin: 0 0 2rem 4rem;
+}
+
+/* Stepper */
+.fi-stepper {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 0 2rem;
+  padding: 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.fi-st {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.fi-st .n {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.fi-st .l small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+.fi-st.active {
+  color: var(--text-primary);
+}
+
+.fi-st.active .n {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+  background: var(--accent-green-bg);
+}
+
+.fi-st.done {
+  color: var(--text-primary);
+}
+
+.fi-st.done .n {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: white;
+}
+
+.fi-st-line {
+  flex: 1;
+  height: 2px;
+  background: var(--border-color);
+  min-width: 20px;
+}
+
+.fi-st-line.done {
+  background: var(--accent-green);
+}
+
+/* Section Headers */
+.fi-sec h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: var(--text-primary);
+}
+
+.fi-sec p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin: 0 0 1.5rem;
+}
+
+/* Cards */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-lg) !important;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.fi-step {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.fi-step b {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent-green);
+  background: var(--accent-green-bg);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.625rem;
+}
+
+.fi-step .t {
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: var(--text-primary);
+}
+
+.fi-step-d {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin: 0 0 1rem 3rem;
+}
+
+/* Inputs */
+[data-testid="stWidgetLabel"] p {
+  color: var(--text-secondary) !important;
+  font-size: 0.875rem !important;
+  font-weight: 500;
+}
+
+div[data-baseweb="input"], 
+div[data-baseweb="base-input"], 
+div[data-baseweb="select"] > div, 
+div[data-baseweb="textarea"] {
+  background: var(--bg-tertiary) !important;
+  border-color: var(--border-color) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+div[data-baseweb="input"]:focus-within {
+  border-color: var(--accent-green) !important;
+}
+
+input, textarea {
+  color: var(--text-primary) !important;
+  font-size: 0.95rem;
+}
+
+/* File Uploader */
+[data-testid="stFileUploaderDropzone"] {
+  background: var(--bg-tertiary) !important;
+  border: 2px dashed var(--border-light) !important;
+  border-radius: var(--radius-lg) !important;
+  padding: 2rem !important;
+  transition: all 0.2s ease;
+}
+
+[data-testid="stFileUploaderDropzone"]:hover {
+  border-color: var(--accent-green) !important;
+  background: rgba(16, 185, 129, 0.05) !important;
+}
+
+[data-testid="stFileUploaderDropzone"] p {
+  color: var(--text-secondary) !important;
+  font-size: 0.95rem !important;
+}
+
+[data-testid="stFileUploaderDropzone"] small {
+  color: var(--text-muted) !important;
+}
+
+/* Expander */
+[data-testid="stExpander"] {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-md) !important;
+  margin: 1rem 0 !important;
+}
+
+[data-testid="stExpander"] summary {
+  padding: 1rem 1.25rem !important;
+  cursor: pointer !important;
+}
+
+[data-testid="stExpander"] summary p {
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+  font-size: 0.95rem !important;
+  margin: 0 !important;
+}
+
+[data-testid="stExpander"] .streamlit-expanderContent {
+  background: var(--bg-card) !important;
+  padding: 1.25rem !important;
+  border-top: 1px solid var(--border-color) !important;
+}
+
+[data-testid="stExpander"] .streamlit-expanderContent p {
+  color: var(--text-secondary) !important;
+  line-height: 1.7 !important;
+  margin-bottom: 0.75rem !important;
+}
+
+[data-testid="stExpander"] .streamlit-expanderContent strong {
+  color: var(--accent-green) !important;
+  font-weight: 600 !important;
+}
+
+/* Buttons */
+.stButton > button, .stDownloadButton > button {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: 0.625rem 1.25rem;
+  transition: all 0.2s ease;
+  font-size: 0.95rem;
+}
+
+.stButton > button:hover, .stDownloadButton > button:hover {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.stButton > button[kind="primary"], 
+button[data-testid="stBaseButton-primary"] {
+  background: var(--accent-green) !important;
+  border-color: var(--accent-green) !important;
+  color: white !important;
+}
+
+.stButton > button[kind="primary"]:hover, 
+button[data-testid="stBaseButton-primary"]:hover {
+  background: var(--accent-green-hover) !important;
+  border-color: var(--accent-green-hover) !important;
+  color: white !important;
+}
+
+/* Callouts */
+.fi-call {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  border: 1px solid;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.fi-call .ic {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.fi-call b {
+  font-weight: 600;
+}
+
+.fi-call.info {
+  background: var(--accent-blue-bg);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.fi-call.info .ic {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--accent-blue);
+}
+
+.fi-call.ok {
+  background: var(--accent-green-bg);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.fi-call.ok .ic {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--accent-green);
+}
+
+.fi-call.warn {
+  background: var(--accent-amber-bg);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.fi-call.warn .ic {
+  background: rgba(245, 158, 11, 0.2);
+  color: var(--accent-amber);
+}
+
+.fi-call.err {
+  background: var(--accent-red-bg);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.fi-call.err .ic {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--accent-red);
+}
+
+/* Error Card */
+.fi-err {
+  background: var(--accent-red-bg);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.fi-err-h {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.fi-err-h .ic {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--accent-red);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.fi-err .t {
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: var(--text-primary);
+}
+
+.fi-err .w {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.fi-err .w span {
+  color: var(--accent-red);
+  font-weight: 500;
+}
+
+.fi-err-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.fi-err-box {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+
+.fi-err-box .k {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.fi-err-box .v {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.fi-err-box.fix {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.fi-err-box.fix .k {
+  color: var(--accent-green);
+}
+
+/* Checklist */
+.fi-checks {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.5rem;
+}
+
+.fi-check {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.fi-check:first-child {
+  border-top: none;
+}
+
+.fi-check .ic {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex: none;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.fi-check.ok .ic {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-green);
+}
+
+.fi-check.warn .ic {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-amber);
+}
+
+.fi-check.err .ic {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--accent-red);
+}
+
+.fi-check .t {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.fi-check .d {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  word-break: break-word;
+}
+
+/* Tables */
+.fi-tw {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: auto;
+  max-height: 400px;
+  background: var(--bg-card);
+  margin: 1rem 0;
+}
+
+.fi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.fi-table th {
+  position: sticky;
+  top: 0;
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.fi-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: top;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.fi-table tr:last-child td {
+  border-bottom: none;
+}
+
+.fi-table td.row {
+  font-family: 'Monaco', 'Consolas', monospace;
+  color: var(--accent-red);
+  white-space: nowrap;
+}
+
+.fi-table td.val {
+  font-family: 'Monaco', 'Consolas', monospace;
+  color: #fca5a5;
+}
+
+.fi-table td.fix {
+  color: #6ee7b7;
+}
+
+.fi-table td.mono {
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* Stats */
+.fi-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.fi-stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+
+.fi-stat-l {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.fi-stat-v {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
+  font-family: 'Monaco', 'Consolas', monospace;
+  color: var(--text-primary);
+}
+
+.fi-stat-v.sm {
+  font-size: 1.125rem;
+}
+
+.fi-stat-s {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  min-height: 1em;
+}
+
+.fi-stat-v.g {
+  color: var(--accent-green);
+}
+
+.fi-stat-v.r {
+  color: var(--accent-red);
+}
+
+.fi-stat-v.a {
+  color: var(--accent-amber);
+}
+
+.fi-bar {
+  height: 8px;
+  background: var(--border-color);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  display: flex;
+}
+
+.fi-bar > .ok {
+  height: 100%;
+  background: var(--accent-green);
+  transition: width 0.4s ease;
+}
+
+.fi-bar > .bad {
+  height: 100%;
+  background: var(--accent-red);
+  transition: width 0.4s ease;
+}
+
+/* Execution Feed */
+.fi-tbl-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 1rem 0 0.5rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.fi-tbl {
+  display: flex;
+  flex-direction: column-reverse;
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.fi-row {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  padding: 0.875rem 1rem 0.875rem 2.5rem;
+  border-top: 1px solid var(--border-color);
+  position: relative;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.fi-row:last-child {
+  border-top: none;
+}
+
+.fi-row::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  top: 1.25rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+}
+
+.fi-row.final::before {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+}
+
+.fi-row.fail {
+  background: var(--accent-red-bg);
+}
+
+.fi-row.fail::before {
+  background: var(--accent-red);
+}
+
+.fi-row.note::before {
+  background: var(--text-muted);
+}
+
+.fi-row.note, .fi-row.empty {
+  color: var(--text-secondary);
+}
+
+.fi-row .r {
+  font-weight: 600;
+}
+
+.fi-row .k {
+  color: var(--text-secondary);
+}
+
+.fi-row .m {
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.8rem;
+}
+
+.fi-row .why {
+  display: block;
+  color: #fca5a5;
+  margin-top: 0.25rem;
+}
+
+.fi-row .todo {
+  display: block;
+  color: #6ee7b7;
+  margin-top: 0.125rem;
+}
+
+.fi-row .pill {
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.75rem;
+  color: var(--accent-green);
+  background: var(--accent-green-bg);
+  border-radius: var(--radius-sm);
+  padding: 0.125rem 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.fi-row.fail .pill {
+  color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+/* Schedule Preview */
+.fi-prev {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 1rem;
+  align-items: center;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  margin-top: 1rem;
+}
+
+.fi-prev .k {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.fi-prev .v {
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 1rem;
+  margin-top: 0.25rem;
+  color: var(--text-primary);
+}
+
+.fi-prev .arrow {
+  color: var(--text-muted);
+  font-size: 1.25rem;
+}
+
+@media (max-width: 768px) {
+  .fi-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .fi-err-grid {
+    grid-template-columns: 1fr;
+  }
+  .fi-st .l {
+    display: none;
+  }
+  .fi-st.active .l {
+    display: inline;
+  }
+  .fi-tag {
+    margin-left: 0;
+  }
+}
+"""
+
+STAGES = [("configure", "Setup", "Data & Form"), ("preflight", "Review", "Check Details"),
+          ("execute", "Running", "Live Progress"), ("results", "Done", "Summary")]
 
 STATUS_LABEL = {
-    "waiting": ("Waiting", "a", "for the start time"),
-    "running": ("Sending", "g", "in progress"),
-    "done": ("Finished", "g", "all rows processed"),
-    "stopped": ("Stopped", "a", "stopped by you"),
-    "error": ("Error", "r", "see the explanation"),
+    "waiting": ("Waiting", "a", "for start time"),
+    "running": ("Running", "g", "in progress"),
+    "done": ("Complete", "g", "all rows processed"),
+    "stopped": ("Stopped", "a", "by user"),
+    "error": ("Error", "r", "see details"),
 }
 
 def esc(v): return html.escape(str(v))
@@ -294,12 +950,12 @@ def error_card(title, where="", why="", fix="", problems=None, technical=""):
     md(f'<div class="fi-err"><div class="fi-err-h"><span class="ic">!</span>'
        f'<div><div class="t">{esc(title)}</div>{where_html}</div></div>{boxes}</div>')
     if problems:
-        html_table(["Sheet row", "Column", "Current value", "What's wrong", "How to fix"],
+        html_table(["Row", "Column", "Value", "Problem", "Fix"],
                    [[p.row, p.column, p.value, p.problem, p.fix] for p in problems[:300]],
                    ["row", "", "val", "", "fix"])
-        if len(problems) > 300: st.caption(f"Showing the first 300 of {len(problems)} problems.")
+        if len(problems) > 300: st.caption(f"Showing first 300 of {len(problems)} problems.")
     if technical:
-        with st.expander("Technical details"): st.code(technical, language=None)
+        with st.expander("Technical Details"): st.code(technical, language=None)
 
 def show_error(exc): error_card(exc.title, exc.where, exc.why, exc.fix, exc.problems, exc.technical)
 
@@ -329,7 +985,11 @@ def format_human(seconds):
     if m: return f"{m}m {s}s"
     return f"{s}s"
 
-def fmt_clock(dt): return dt.strftime("%I:%M:%S %p").lstrip("0")
+def fmt_clock(dt): return dt.strftime("%I:%M %p").lstrip("0")
+
+# ============================================================
+#  ERRORS & DATA LOADING
+# ============================================================
 
 @dataclass
 class Problem:
@@ -349,10 +1009,10 @@ class AppError(Exception):
 def explain_exception(exc):
     tech = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))[-3000:]
     if isinstance(exc, PermissionError):
-        return dict(title="Couldn't save the updated file", why="File is open or access denied.", fix="Close the file and try again.", technical=tech)
+        return dict(title="Cannot save file", why="File is open or access denied.", fix="Close the file and try again.", technical=tech)
     if isinstance(exc, OSError) and getattr(exc, "errno", None) == 28:
-        return dict(title="Server out of disk space", why="No room to save.", fix="Try again later.", technical=tech)
-    return dict(title="Something unexpected went wrong", why="Unknown error.", fix="Contact support.", technical=tech)
+        return dict(title="Out of disk space", why="No room to save.", fix="Try again later.", technical=tech)
+    return dict(title="Unexpected error", why="Unknown error occurred.", fix="Contact support.", technical=tech)
 
 def sheet_row(idx): return int(idx) + 2
 
@@ -437,6 +1097,10 @@ def save_dataframe(df, file_path):
     elif lower == ".ods": df.to_excel(tmp, index=False, engine="odf")
     else: df.to_csv(tmp, index=False)
     os.replace(tmp, file_path)
+
+# ============================================================
+#  FORM METADATA & VALIDATION
+# ============================================================
 
 def extract_entry_ids(prefilled_link):
     parsed = urllib.parse.urlparse(prefilled_link)
@@ -563,7 +1227,7 @@ def split_choices(value, options):
     return [v.strip() for v in value.split(",") if v.strip()]
 
 def _opts_hint(opts, limit=8):
-    shown = ", ".join(f"“{o}”" for o in opts[:limit])
+    shown = ", ".join(f"'{o}'" for o in opts[:limit])
     return shown + (f" (+{len(opts) - limit} more)" if len(opts) > limit else "")
 
 def auto_correct(df, pending_indices, required_columns, form: FormInfo):
@@ -584,7 +1248,7 @@ def auto_correct(df, pending_indices, required_columns, form: FormInfo):
                     fixed = [best_option(p, opts) for p in parts]
                     bad = [p for p, f in zip(parts, fixed) if f is None]
                     if bad:
-                        problems.append(Problem(sheet_row(idx), col, value, f"{', '.join(f'“{b}”' for b in bad)} not in choices.", f"Use: {_opts_hint(opts)}."))
+                        problems.append(Problem(sheet_row(idx), col, value, f"{', '.join(f'{b}' for b in bad)} not in choices.", f"Use: {_opts_hint(opts)}."))
                         continue
                     candidate = ", ".join(dict.fromkeys(fixed))
                     if candidate != value: new_val, reason = candidate, "matched choices"
@@ -621,6 +1285,10 @@ def validate_data(df, pending_indices, required_columns, form: FormInfo):
                 if bad: problems.append(Problem(sheet_row(idx), col, value, "Answer not in choices.", f"Use: {_opts_hint(opts)}."))
     return problems
 
+# ============================================================
+#  SCHEDULING & SUBMISSION
+# ============================================================
+
 def base_window(start_t, end_t):
     today = datetime.now(IST).date()
     start_dt = IST.localize(datetime.combine(today, start_t))
@@ -649,10 +1317,10 @@ def compute_time_window(start_t, end_t, start_range, end_range, total_rows, log)
             raise AppError("Window too short", where="Step 4", why=f"{total_rows} rows need {format_human(min_required_sec)}.", fix="Increase window.")
         raise AppError("Random delays invalid", where="Step 4", why="Offsets make window shorter than entered.", fix="Adjust ranges.")
     log("========== TIME CONFIGURATION ==========")
-    log(f"Entered start: {start_dt.strftime('%d-%m-%Y %I:%M:%S %p IST')}")
-    log(f"Entered end: {end_dt.strftime('%d-%m-%Y %I:%M:%S %p IST')}")
-    log(f"Actual start: {rand_start.strftime('%d-%m-%Y %I:%M:%S %p IST')}")
-    log(f"Actual end: {rand_end.strftime('%d-%m-%Y %I:%M:%S %p IST')}")
+    log(f"Entered start: {start_dt.strftime('%d-%m-%Y %I:%M %p IST')}")
+    log(f"Entered end: {end_dt.strftime('%d-%m-%Y %I:%M %p IST')}")
+    log(f"Actual start: {rand_start.strftime('%d-%m-%Y %I:%M %p IST')}")
+    log(f"Actual end: {rand_end.strftime('%d-%m-%Y %I:%M %p IST')}")
     log(f"Rows: {total_rows}")
     log("========================================")
     cfg = dict(entered_start=start_dt, entered_end=end_dt, rs=rs, re=re_, rand_start=rand_start, rand_end=rand_end, original_window=original_window_sec, window=window_sec, min_required=min_required_sec, total_rows=total_rows)
@@ -782,6 +1450,10 @@ def generate_analysis_sheet(df, file_path, submitted_count, log):
     wb.save(file_path)
     log("Analysis sheet added.")
 
+# ============================================================
+#  PREPARATION & JOB
+# ============================================================
+
 @dataclass
 class Prepared:
     df: pd.DataFrame; output_path: str; status_col: str; required_columns: dict; form: FormInfo
@@ -790,7 +1462,7 @@ class Prepared:
 
 def check_link(link):
     link = link.strip()
-    how = "In Google Forms: ⋮ menu → 'Get pre-filled link' → Fill answers → 'Get link' → Copy."
+    how = "Open form → ⋮ menu → 'Get pre-filled link' → Fill answers → 'Get link' → Copy."
     if not link: raise AppError("No form link", where="Step 2", why="Box empty.", fix=how)
     if "/viewform" not in link or not link.startswith("http"): raise AppError("Invalid link", where="Step 2", why="Not a pre-filled link.", fix=how, technical=link)
     if not extract_entry_ids(link): raise AppError("No entry IDs", where="Step 2", why="Link missing 'entry.' values.", fix=how, technical=link)
@@ -909,12 +1581,12 @@ class Job:
                     with self.lock: self.submitted += 1
                     if i < total_rows:
                         nxt = start_ref + timedelta(seconds=offsets[i]); gap = format_human(offsets[i] - offsets[i - 1])
-                        self._add(kind="ok", row=row_no, time=now_s, nxt=fmt_clock(nxt), gap=gap, text=f"Sheet row {row_no} sent at {now_s} IST · next at {fmt_clock(nxt)} (in {gap})")
-                    else: self._add(kind="final", row=row_no, time=now_s, text=f"Sheet row {row_no} sent at {now_s} IST · last entry")
+                        self._add(kind="ok", row=row_no, time=now_s, nxt=fmt_clock(nxt), gap=gap, text=f"Row {row_no} sent at {now_s} · next at {fmt_clock(nxt)} (in {gap})")
+                    else: self._add(kind="final", row=row_no, time=now_s, text=f"Row {row_no} sent at {now_s} · last entry")
                 else:
                     fail = dict(row=row_no, time=now_s, problem=res.problem, fix=res.fix, technical=res.technical, http=res.http)
                     with self.lock: self.failed += 1; self.failures.append(fail)
-                    self._add(kind="fail", **fail, text=f"Sheet row {row_no} NOT sent at {now_s} IST · {res.problem} · {res.fix}")
+                    self._add(kind="fail", **fail, text=f"Row {row_no} failed at {now_s} · {res.problem} · {res.fix}")
                 if dirty and (time.time() - last_save >= SAVE_EVERY_SEC or i == total_rows):
                     save_dataframe(p.df, p.output_path); dirty, last_save = False, time.time()
             if dirty: save_dataframe(p.df, p.output_path)
@@ -935,13 +1607,17 @@ class Job:
             lines += [r["text"] for r in self.rows]
             if self.failures:
                 lines += ["", "========== FAILED ROWS =========="]
-                for f in self.failures: lines += [f"Sheet row {f['row']}: {f['problem']}", f"  Fix: {f['fix']}", f"  Tech: {f['technical']}"]
+                for f in self.failures: lines += [f"Row {f['row']}: {f['problem']}", f"  Fix: {f['fix']}", f"  Tech: {f['technical']}"]
             if self.error: lines += ["", "========== ERROR ==========", self.error["title"], self.error["technical"]]
         return "\n".join(lines)
     def failures_csv(self):
         with self.lock:
-            rows = [dict(**{"Sheet row": f["row"], "Time (IST)": f["time"], "What went wrong": f["problem"], "What to do": f["fix"], "Technical detail": f["technical"]}) for f in self.failures]
+            rows = [dict(**{"Row": f["row"], "Time": f["time"], "Problem": f["problem"], "Fix": f["fix"], "Technical": f["technical"]}) for f in self.failures]
         return pd.DataFrame(rows).to_csv(index=False)
+
+# ============================================================
+#  UI VIEWS
+# ============================================================
 
 def schedule_preview(start_t, end_t, srange, erange):
     s, e = base_window(start_t, end_t)
@@ -957,92 +1633,91 @@ def schedule_preview(start_t, end_t, srange, erange):
 
 def view_configure():
     saved = st.session_state.get("inp", {})
-    section_head("Set up your run", "Four quick steps. Nothing is sent until you've reviewed everything.")
+    section_head("Setup Your Run", "Complete these four steps. Nothing is sent until you review everything.")
+    
     with st.container(border=True):
-        step_head("01", "Your data", "Spreadsheet with one row per response.")
+        step_head("01", "Your Data", "Provide your spreadsheet with one row per response.")
         kinds = ["Upload a file", "Google Sheet link", "Enter data manually"] + (["File on this computer"] if ALLOW_LOCAL_PATHS else [])
         kind_keys = {"Upload a file": "upload", "Google Sheet link": "sheet", "Enter data manually": "manual", "File on this computer": "local"}
         prev = next((k for k, v in kind_keys.items() if v == saved.get("source_kind")), kinds[0])
-        kind_label = st.radio("Where is your data?", kinds, horizontal=True, key="source_kind", index=kinds.index(prev) if prev in kinds else 0, label_visibility="collapsed")
+        kind_label = st.radio("Data Source", kinds, horizontal=True, key="source_kind", index=kinds.index(prev) if prev in kinds else 0, label_visibility="collapsed")
         kind = kind_keys[kind_label]
         upload, sheet_url, local_path, manual_data = None, "", "", ""
+        
         if kind == "upload":
-            st.markdown("###  Upload Your File")
             upload = st.file_uploader(
                 "Choose a spreadsheet file", 
                 type=[e.lstrip(".") for e in SUPPORTED_EXT], 
-                key="upload", 
-                help="Supported formats: Excel (.xlsx, .xls), CSV, TSV, OpenDocument (.ods), or JSON"
+                key="upload",
+                help="Supported: Excel, CSV, TSV, OpenDocument, JSON"
             )
             if upload:
-                st.success(f"✅ File selected: **{upload.name}**")
-            if not upload and saved.get("upload"): 
-                st.info(f"📄 Using earlier file: **{saved['upload'][0]}**")
-            st.caption("💡 Tip: A column named **Status** automatically tracks which rows were already sent.")
+                st.success(f"File selected: {upload.name}")
+            elif saved.get("upload"):
+                st.info(f"Using previous file: {saved['upload'][0]}")
+            st.caption("Tip: Include a 'Status' column to track sent rows.")
+            
         elif kind == "sheet":
             sheet_url = st.text_input(
-                "🔗 Google Sheet Link", 
+                "Google Sheet Link", 
                 value=saved.get("sheet_url", ""), 
-                key="sheet_url", 
-                placeholder="https://docs.google.com/spreadsheets/d/…",
-                help="The sheet must be shared as 'Anyone with the link → Viewer'."
+                key="sheet_url",
+                placeholder="https://docs.google.com/spreadsheets/d/...",
+                help="Sheet must be shared as 'Anyone with link'"
             )
-            st.caption("💡 Tip: Make sure your Google Sheet is publicly accessible.")
+            st.caption("Tip: Make sure your Google Sheet is publicly accessible.")
+            
         elif kind == "manual":
             manual_data = st.text_area(
-                "📝 Paste CSV Data", 
+                "Paste CSV Data", 
                 value=saved.get("manual_data", ""), 
-                key="manual_data", 
+                key="manual_data",
                 height=200,
                 placeholder="Name,Email,Age\nJohn,john@example.com,30\nJane,jane@example.com,25",
-                help="Paste your data with headers in CSV format (comma-separated values)."
+                help="Include headers in first row"
             )
-            st.caption("💡 Tip: First line must contain column headers.")
+            st.caption("Tip: First line must contain column headers.")
+            
         else:
             local_path = st.text_input(
-                "📂 Full Path to File", 
+                "Full File Path", 
                 value=saved.get("local_path", ""), 
-                key="local_path", 
-                placeholder="C:\\data\\responses.xlsx",
-                help="Enter the complete file path on this server."
+                key="local_path",
+                placeholder="C:\\data\\responses.xlsx"
             )
-            st.caption(" Tip: Only available if FORMINTELLECT_ALLOW_LOCAL_PATHS=1")
+            st.caption("Only available if FORMINTELLECT_ALLOW_LOCAL_PATHS=1")
 
     with st.container(border=True):
         step_head("02", "Your Google Form", "Paste the pre-filled link to map columns to questions.")
         link = st.text_input(
-            "🔗 Pre-filled Form Link", 
+            "Pre-filled Form Link", 
             value=saved.get("link", ""), 
-            key="link", 
-            placeholder="https://docs.google.com/forms/d/e/…/viewform?entry.123=…",
-            help="This link tells the app which column goes to which question."
+            key="link",
+            placeholder="https://docs.google.com/forms/d/e/.../viewform?entry.123=...",
+            help="This tells the app which column goes to which question"
         )
         
-        # Improved expander with better formatting
-        with st.expander("❓ How do I get a pre-filled link?", expanded=False):
+        with st.expander("How to get a pre-filled link"):
             st.markdown("""
-            **Follow these steps to create a pre-filled link:**
+            **Follow these steps:**
             
-            1. **Open your form** in Google Forms (edit mode)
+            1. Open your form in Google Forms (edit mode)
             2. Click the **⋮ menu** (three dots) at the top right
             3. Select **"Get pre-filled link"**
-            4. **Type any answer** in every question you want to fill automatically
-            5. Click **"Get link"** at the bottom
-            6. Click **"Copy link"** and paste it above
+            4. Type any answer in every question
+            5. Click **"Get link"** then **"Copy link"**
+            6. Paste the link above
             
-            **Important:** 
-            - Your spreadsheet columns should match the **order of questions** in the form
-            - OR you can name columns like `entry.123456789` to match specific questions
-            - The link will look like: `https://docs.google.com/forms/.../viewform?entry.123=...`
+            **Important:** Your spreadsheet columns should match the order of questions in the form, or be named like `entry.123456789`.
             """)
 
     with st.container(border=True):
-        step_head("03", "Which rows", "Rows marked 'submitted' are automatically skipped.")
+        step_head("03", "Which Rows", "Rows marked 'submitted' are automatically skipped.")
         use_random = st.toggle(
-            " Pick rows at random", 
+            "Pick rows at random", 
             value=bool(saved.get("random", False)), 
-            key="random", 
-            help="Off: sends rows top to bottom\nOn: sends rows in random order"
+            key="random",
+            help="Off: top to bottom. On: random order."
         )
         sample_n = 0
         if use_random: 
@@ -1056,72 +1731,39 @@ def view_configure():
             )
 
     with st.container(border=True):
-        step_head("04", "When to submit", "Entries are spread randomly between these times (India time, IST).")
+        step_head("04", "When to Submit", "Entries spread randomly between these times (IST).")
         c1, c2 = st.columns(2)
         start = c1.time_input(
-            " Start time", 
+            "Start Time", 
             value=saved.get("start", dtime(9, 0)), 
             step=60, 
-            key="start",
-            help="When to begin sending submissions"
+            key="start"
         )
         end = c2.time_input(
-            "🕐 End time", 
+            "End Time", 
             value=saved.get("end", dtime(11, 0)), 
             step=60, 
             key="end",
-            help="When to finish (if earlier than start, continues past midnight)"
+            help="If earlier than start, continues past midnight"
         )
         c3, c4 = st.columns(2)
         s_min = saved.get("srange", (0, 0))[0] if isinstance(saved.get("srange"), tuple) else 0
         s_max = saved.get("srange", (0, 0))[1] if isinstance(saved.get("srange"), tuple) else 0
         e_min = saved.get("erange", (0, 0))[0] if isinstance(saved.get("erange"), tuple) else 0
         e_max = saved.get("erange", (0, 0))[1] if isinstance(saved.get("erange"), tuple) else 0
-        srange_min = c3.number_input(
-            "⏱️ Min extra wait (seconds)", 
-            min_value=0, 
-            max_value=3600, 
-            value=int(s_min), 
-            step=5, 
-            key="srange_min",
-            help="Minimum random delay before first entry"
-        )
-        srange_max = c3.number_input(
-            "⏱️ Max extra wait (seconds)", 
-            min_value=0, 
-            max_value=3600, 
-            value=int(s_max), 
-            step=5, 
-            key="srange_max",
-            help="Maximum random delay before first entry"
-        )
-        erange_min = c4.number_input(
-            "️ Min extra time after end", 
-            min_value=0, 
-            max_value=3600, 
-            value=int(e_min), 
-            step=5, 
-            key="erange_min",
-            help="Minimum random extension after end time"
-        )
-        erange_max = c4.number_input(
-            "⏱️ Max extra time after end", 
-            min_value=0, 
-            max_value=3600, 
-            value=int(e_max), 
-            step=5, 
-            key="erange_max",
-            help="Maximum random extension after end time"
-        )
+        srange_min = c3.number_input("Min extra wait (seconds)", min_value=0, max_value=3600, value=int(s_min), step=5, key="srange_min")
+        srange_max = c3.number_input("Max extra wait (seconds)", min_value=0, max_value=3600, value=int(s_max), step=5, key="srange_max")
+        erange_min = c4.number_input("Min extra time after end", min_value=0, max_value=3600, value=int(e_min), step=5, key="erange_min")
+        erange_max = c4.number_input("Max extra time after end", min_value=0, max_value=3600, value=int(e_max), step=5, key="erange_max")
         srange = (srange_min, srange_max)
         erange = (erange_min, erange_max)
         schedule_preview(start, end, srange, erange)
 
-    if st.button("✅ Check everything →", type="primary", width="stretch", use_container_width=True):
+    if st.button("Check Everything", type="primary", width="stretch"):
         inp = dict(source_kind=kind, upload=(upload.name, upload.getvalue()) if upload else saved.get("upload"), sheet_url=sheet_url, local_path=local_path, manual_data=manual_data, link=link, random=bool(use_random), sample_n=int(sample_n), start=start, end=end, srange=tuple(srange), erange=tuple(erange))
         st.session_state.inp = inp
         try:
-            with st.spinner(" Reading data and checking form…"):
+            with st.spinner("Reading data and checking form..."):
                 st.session_state.prep = prepare(inp, st.session_state.workdir)
             st.rerun()
         except AppError as exc: show_error(exc)
@@ -1130,71 +1772,71 @@ def view_configure():
 def build_checks(prep: Prepared):
     s, cfg = prep.summary, prep.time_cfg
     checks = []
-    src = f'{s["source"]} · {s["rows"]} rows · {s["cols"]} columns · {s["pending"]} not yet submitted'
+    src = f'{s["source"]} · {s["rows"]} rows · {s["cols"]} columns · {s["pending"]} pending'
     checks.append(("ok", "Data loaded", src))
-    checks.append(("ok", "Rows to send", f'{s["selected"]} of {s["pending"]} pending rows, picked at random' if s["random"] else f'All {s["selected"]} pending rows, top to bottom'))
-    checks.append(("ok", "Columns matched", f'{len(prep.mapping)} column(s) matched to {s["entry_fields"]} question(s)'))
-    if prep.form.field_types: checks.append(("ok", "Form read", "Question types and choices read."))
-    elif s["form_reachable"]: checks.append(("warn", "Form partly read", "Questions couldn't be fully read."))
-    else: checks.append(("warn", "Couldn't open form", "Answers couldn't be checked against choices."))
-    if prep.corrections: checks.append(("warn", "Small fixes made", f"{len(prep.corrections)} value(s) adjusted."))
-    else: checks.append(("ok", "Small fixes", "None needed."))
-    checks.append(("ok", "Answers checked", f'{s["selected"]} rows × {s["validated_fields"]} questions look good.'))
-    sched = f'{fmt_clock(prep.rand_start)} → {fmt_clock(prep.rand_end)} IST · {format_human(cfg["window"] / max(cfg["total_rows"], 1))}'
-    if datetime.now(IST) >= prep.rand_start: checks.append(("warn", "Schedule", sched + " · start time passed, sending begins now."))
+    checks.append(("ok", "Rows to send", f'{s["selected"]} of {s["pending"]} rows' + (", random order" if s["random"] else ", top to bottom")))
+    checks.append(("ok", "Columns matched", f'{len(prep.mapping)} columns matched to {s["entry_fields"]} questions'))
+    if prep.form.field_types: checks.append(("ok", "Form read", "Question types and choices loaded"))
+    elif s["form_reachable"]: checks.append(("warn", "Form partly read", "Questions couldn't be fully read"))
+    else: checks.append(("warn", "Couldn't open form", "Answers couldn't be validated"))
+    if prep.corrections: checks.append(("warn", "Auto-fixes applied", f"{len(prep.corrections)} values adjusted"))
+    else: checks.append(("ok", "No fixes needed", "All values look good"))
+    checks.append(("ok", "Validation passed", f'{s["selected"]} rows × {s["validated_fields"]} questions checked'))
+    sched = f'{fmt_clock(prep.rand_start)} → {fmt_clock(prep.rand_end)} IST'
+    if datetime.now(IST) >= prep.rand_start: checks.append(("warn", "Schedule", sched + " (start time passed)"))
     else: checks.append(("ok", "Schedule", sched))
     return checks
 
 def view_preflight(prep: Prepared):
-    section_head("Check before sending", "Everything passed. Nothing sent yet.")
+    section_head("Review Before Sending", "Everything looks good. Nothing has been sent yet.")
     cfg = prep.time_cfg
     callout("ok", f"<b>Ready to send {cfg['total_rows']} row(s)</b> between <b>{fmt_clock(prep.rand_start)}</b> and <b>{fmt_clock(prep.rand_end)}</b> IST.")
-    icons = {"ok": "✓", "warn": "!", "err": ""}
+    icons = {"ok": "✓", "warn": "!", "err": "✕"}
     rows = "".join(f'<div class="fi-check {k}"><span class="ic">{icons[k]}</span><div><div class="t">{esc(t)}</div><div class="d">{esc(d)}</div></div></div>' for k, t, d in build_checks(prep))
     md(f'<div class="fi-checks">{rows}</div>')
-    t_map, t_fix, t_sched, t_console = st.tabs(["Column matching", "Auto-fixes", "Schedule", "Full log"])
+    t_map, t_fix, t_sched, t_console = st.tabs(["Column Mapping", "Auto-fixes", "Schedule", "Full Log"])
     with t_map:
-        html_table(["Your column", "Form question", "Question ID", "Type", "Required"], [[m["Column"], m["Question"], m["ID"], m["Type"], m["Required"]] for m in prep.mapping], ["", "", "mono", "mono", ""])
+        html_table(["Column", "Question", "ID", "Type", "Required"], [[m["Column"], m["Question"], m["ID"], m["Type"], m["Required"]] for m in prep.mapping], ["", "", "mono", "mono", ""])
     with t_fix:
         if prep.corrections:
-            st.caption("Values changed to match form exactly.")
-            html_table(["Sheet row", "Column", "Was", "Now", "Why"], [[c["Row"], c["Column"], c["From"], c["To"], c["Why"]] for c in prep.corrections], ["mono", "", "val", "fix", ""])
+            st.caption("Values adjusted to match form exactly.")
+            html_table(["Row", "Column", "Was", "Now", "Why"], [[c["Row"], c["Column"], c["From"], c["To"], c["Why"]] for c in prep.corrections], ["mono", "", "val", "fix", ""])
         else: st.caption("No values needed changing.")
     with t_sched:
         es, ee = cfg["entered_start"], cfg["entered_end"]
-        stats_grid(stat("You entered", fmt_clock(es), es.strftime("%d %b %Y"), small=True), stat("Until", fmt_clock(ee), ee.strftime("%d %b %Y"), small=True), stat("Actual start", fmt_clock(cfg["rand_start"]), f'+{cfg["rs"]}s random wait', "g", small=True), stat("Actual end", fmt_clock(cfg["rand_end"]), f'+{cfg["re"]}s random extra', "g", small=True))
+        stats_grid(stat("You entered", fmt_clock(es), es.strftime("%d %b %Y"), small=True), stat("Until", fmt_clock(ee), ee.strftime("%d %b %Y"), small=True), stat("Actual start", fmt_clock(cfg["rand_start"]), f'+{cfg["rs"]}s delay', "g", small=True), stat("Actual end", fmt_clock(cfg["rand_end"]), f'+{cfg["re"]}s extra', "g", small=True))
         avg = cfg["window"] / max(cfg["total_rows"], 1)
-        stats_grid(stat("Window entered", format_human(cfg["original_window"]), "", small=True), stat("Window used", format_human(cfg["window"]), "", "g", small=True), stat("Rows to send", cfg["total_rows"], f'needs at least {format_human(cfg["min_required"])}', small=True), stat("Average gap", format_human(avg), "between entries", small=True))
-        if st.button("Pick new random times", help="Draws new random offsets"):
+        stats_grid(stat("Window entered", format_human(cfg["original_window"]), "", small=True), stat("Window used", format_human(cfg["window"]), "", "g", small=True), stat("Rows to send", cfg["total_rows"], f'needs {format_human(cfg["min_required"])}', small=True), stat("Average gap", format_human(avg), "between entries", small=True))
+        if st.button("Pick new random times"):
             try:
                 reroll_schedule(prep)
                 st.rerun()
             except AppError as exc: show_error(exc)
     with t_console: st.code(console_text(prep), language=None)
-    md("<div style='height:6px'></div>")
+    md("<div style='height:1rem'></div>")
     b1, b2 = st.columns([1, 2])
-    if b1.button("← Back to set up", width="stretch"):
+    if b1.button("Back to Setup", width="stretch"):
         st.session_state.prep = None; st.rerun()
-    if b2.button("Start sending →", type="primary", width="stretch"):
+    if b2.button("Start Sending", type="primary", width="stretch"):
         job = Job(prep); job.start(); st.session_state.job = job; st.rerun()
 
 def render_feed(rows):
     def row_html(r):
         k = r["kind"]
         if k in ("ok", "final"):
-            s = f'<span class="r">Sheet row {r["row"]}</span> sent at <span class="m">{esc(r["time"])}</span><span class="pill">✓ sent</span>'
+            s = f'<span class="r">Row {r["row"]}</span> sent at <span class="m">{esc(r["time"])}</span><span class="pill">✓</span>'
             if k == "ok": s += f' <span class="k">· next at</span> <span class="m">{esc(r["nxt"])}</span> <span class="k">(in {esc(r["gap"])})</span>'
             else: s += ' <span class="k">· last entry</span>'
             return f'<div class="fi-row {k}">{s}</div>'
         if k == "fail":
-            return f'<div class="fi-row fail"><span class="r">Sheet row {r["row"]}</span> not sent at <span class="m">{esc(r["time"])}</span><span class="pill">✕ failed</span><span class="why">Why: {esc(r["problem"])}</span><span class="todo">What to do: {esc(r["fix"])}</span></div>'
+            return f'<div class="fi-row fail"><span class="r">Row {r["row"]}</span> failed at <span class="m">{esc(r["time"])}</span><span class="pill">✕</span><span class="why">Why: {esc(r["problem"])}</span><span class="todo">Fix: {esc(r["fix"])}</span></div>'
         return f'<div class="fi-row {k}">{esc(r["text"])}</div>'
     if rows: body = "".join(row_html(r) for r in reversed(rows))
-    else: body = '<div class="fi-row empty">No entries yet…</div>'
+    else: body = '<div class="fi-row empty">No entries yet...</div>'
     md(f'<div class="fi-tbl-h"><span>Activity</span><span>{len(rows)} events</span></div><div class="fi-tbl">{body}</div>')
 
 def render_failures(failures):
-    html_table(["Sheet row", "Time (IST)", "What went wrong", "What to do"], [[f["row"], f["time"], f["problem"], f["fix"]] for f in failures], ["row", "mono", "", "fix"])
+    html_table(["Row", "Time", "Problem", "Fix"], [[f["row"], f["time"], f["problem"], f["fix"]] for f in failures], ["row", "mono", "", "fix"])
 
 def render_monitor(job: Job):
     s = job.snapshot()
@@ -1206,49 +1848,53 @@ def render_monitor(job: Job):
         secs = max(0, int((s["next_target"] - datetime.now(IST)).total_seconds()))
         nxt_v, nxt_s = format_mm_ss(secs), f'at {fmt_clock(s["next_target"])} IST'
     else: nxt_v, nxt_s = "—", ""
-    md('<div class="fi-stats">' + stat("Status", label, sub, tone) + stat("Sent", f'{s["submitted"]}<span style="color:#6B7480"> / {s["total"]}</span>', f"{int(ok_pct)}% done", "g", raw_value=True) + stat("Failed", s["failed"], "explained below" if s["failed"] else "none so far", "r" if s["failed"] else "") + stat("Next entry in", nxt_v, nxt_s) + f'</div><div class="fi-bar"><div class="ok" style="width:{ok_pct:.1f}%"></div><div class="bad" style="width:{bad_pct:.1f}%"></div></div>')
+    md('<div class="fi-stats">' + stat("Status", label, sub, tone) + stat("Sent", f'{s["submitted"]}/{s["total"]}', f"{int(ok_pct)}% done", "g", raw_value=True) + stat("Failed", s["failed"], "see below" if s["failed"] else "none", "r" if s["failed"] else "") + stat("Next in", nxt_v, nxt_s) + f'</div><div class="fi-bar"><div class="ok" style="width:{ok_pct:.1f}%"></div><div class="bad" style="width:{bad_pct:.1f}%"></div></div>')
     if s["failures"]:
-        callout("err", f"<b>{len(s['failures'])} row(s) couldn't be sent.</b> Failed rows stay pending.")
+        callout("err", f"<b>{len(s['failures'])} row(s) failed.</b> Failed rows stay pending.")
         render_failures(s["failures"])
     render_feed(s["rows"])
     if job.active:
-        if st.button("Stop sending", key="stop_btn", help="Finishes current entry, then stops."): job.stop.set()
+        if st.button("Stop Sending", key="stop_btn"): job.stop.set()
     elif not job.notified:
         job.notified = True; st.rerun()
 
 def view_execute(job: Job):
-    section_head("Sending", "Entries being sent in background. Keep tab open.")
+    section_head("Sending in Progress", "Keep this tab open until complete.")
     monitor = st.fragment(run_every=1)(render_monitor)
     monitor(job)
-    with st.expander("Check log", expanded=False): st.code(console_text(job.prep), language=None)
+    with st.expander("View Log", expanded=False): st.code(console_text(job.prep), language=None)
 
 def view_results(job: Job):
     s = job.snapshot()
-    section_head("Results", "What was sent, what wasn't, and why.")
+    section_head("Results", "Summary of what was sent.")
     if s["status"] == "error":
         err = s["error"] or {}
-        error_card(err.get("title", "Something went wrong"), "During sending", err.get("why", ""), err.get("fix", ""), technical=err.get("technical", ""))
-    elif s["status"] == "stopped": callout("warn", "<b>You stopped the run.</b> Sent rows marked 'submitted'. Upload updated file to continue.")
+        error_card(err.get("title", "Error"), "During sending", err.get("why", ""), err.get("fix", ""), technical=err.get("technical", ""))
+    elif s["status"] == "stopped": callout("warn", "<b>Stopped by user.</b> Sent rows marked 'submitted'.")
     elif s["failed"]: callout("warn", f"<b>{s['submitted']} sent, {s['failed']} failed.</b> Failed rows stay pending.")
     else: callout("ok", f"<b>All {s['submitted']} row(s) sent successfully.</b>")
-    stats_grid(stat("Sent", f'{s["submitted"]}<span style="color:#6B7480"> / {s["total"]}</span>', "", "g", raw_value=True), stat("Failed", s["failed"], "", "r" if s["failed"] else ""), stat("Status", STATUS_LABEL[s["status"]][0], STATUS_LABEL[s["status"]][2], STATUS_LABEL[s["status"]][1]), stat("Run time", format_human(job.elapsed()), "from first entry"))
+    stats_grid(stat("Sent", f'{s["submitted"]}/{s["total"]}', "", "g", raw_value=True), stat("Failed", s["failed"], "", "r" if s["failed"] else ""), stat("Status", STATUS_LABEL[s["status"]][0], STATUS_LABEL[s["status"]][2], STATUS_LABEL[s["status"]][1]), stat("Run time", format_human(job.elapsed()), "total"))
     if s["failures"]:
-        md('<div class="fi-tbl-h"><span>Rows not sent</span></div>')
+        md('<div class="fi-tbl-h"><span>Failed Rows</span></div>')
         render_failures(s["failures"])
-        with st.expander("Technical details for failed rows"): st.code("\n\n".join(f"Sheet row {f['row']}:\n{f['technical']}" for f in s["failures"]), language=None)
+        with st.expander("Technical Details"): st.code("\n\n".join(f"Row {f['row']}:\n{f['technical']}" for f in s["failures"]), language=None)
     render_feed(s["rows"])
-    md("<div style='height:14px'></div>")
+    md("<div style='height:1rem'></div>")
     cols = st.columns(4 if s["failures"] else 3)
     out = job.prep.output_path
     if os.path.exists(out):
-        with open(out, "rb") as fh: cols[0].download_button("Download updated file", fh.read(), file_name=os.path.basename(out), width="stretch", help="Data with Status column filled.")
-    else: cols[0].button("No updated file", disabled=True, width="stretch")
-    cols[1].download_button("Download run log", job.log_text(), file_name="formintellect_log.txt", width="stretch")
-    if s["failures"]: cols[2].download_button("Download failed rows", job.failures_csv(), file_name="formintellect_failed_rows.csv", width="stretch")
-    if cols[-1].button("Start a new run", type="primary", width="stretch"):
+        with open(out, "rb") as fh: cols[0].download_button("Download Updated File", fh.read(), file_name=os.path.basename(out), width="stretch")
+    else: cols[0].button("No File", disabled=True, width="stretch")
+    cols[1].download_button("Download Log", job.log_text(), file_name="formintellect_log.txt", width="stretch")
+    if s["failures"]: cols[2].download_button("Download Failed Rows", job.failures_csv(), file_name="failed_rows.csv", width="stretch")
+    if cols[-1].button("Start New Run", type="primary", width="stretch"):
         st.session_state.pop("job", None); st.session_state.pop("prep", None); st.rerun()
-    if s["status"] == "done" and out.lower().endswith(".xlsx"): st.caption("Updated workbook includes 'Analysis' sheet.")
-    with st.expander("Check log", expanded=False): st.code(console_text(job.prep), language=None)
+    if s["status"] == "done" and out.lower().endswith(".xlsx"): st.caption("Updated file includes 'Analysis' sheet.")
+    with st.expander("View Log", expanded=False): st.code(console_text(job.prep), language=None)
+
+# ============================================================
+#  MAIN APP
+# ============================================================
 
 def current_stage():
     job = st.session_state.get("job")
@@ -1263,7 +1909,7 @@ def main():
     
     md('<div class="fi-hero"><div class="fi-logo">✓</div>'
        '<div class="fi-name">Form<span>Intellect</span></div></div>'
-       '<div class="fi-tag">Checked, paced Google Form submissions from your spreadsheet.</div>')
+       '<div class="fi-tag">Professional Google Form submission scheduler</div>')
 
     stage = current_stage()
     stepper(stage)
