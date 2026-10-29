@@ -17,6 +17,7 @@ v2 changes
     and the server file-path box is off unless FORMINTELLECT_ALLOW_LOCAL_PATHS=1.
   * NEW: Manual data entry via CSV paste.
   * FIX: Button text duplication removed.
+  * UPDATE: Replaced sliders with number inputs for random wait times.
 
 Run:  streamlit run app.py
 """
@@ -1398,7 +1399,6 @@ div[data-baseweb="button"] button[kind="primary"] {
   background:var(--green)!important; 
   border-color:var(--green)!important; 
   color:#0B0D10!important;
-  /* Ensure text is not duplicated by hiding potential pseudo-elements or extra spans if any */
 }
 .stButton > button[kind="primary"]:hover, 
 button[data-testid="stBaseButton-primary"]:hover,
@@ -1718,12 +1718,24 @@ def view_configure():
         end = c2.time_input("End time", value=saved.get("end", dtime(11, 0)), step=60, key="end",
                             help="If the end is earlier than the start, the run continues past midnight.")
         c3, c4 = st.columns(2)
-        srange = c3.slider("Extra random wait before the first entry (seconds)", 0, 3600,
-                           value=tuple(saved.get("srange", (0, 0))), step=5, key="srange",
-                           help="A random number of seconds in this range is added to the start time.")
-        erange = c4.slider("Extra random time after the end (seconds)", 0, 3600,
-                           value=tuple(saved.get("erange", (0, 0))), step=5, key="erange",
-                           help="A random number of seconds in this range is added to the end time.")
+        
+        # Changed from sliders to number inputs for precise control
+        s_min = saved.get("srange", (0, 0))[0] if isinstance(saved.get("srange"), tuple) else 0
+        s_max = saved.get("srange", (0, 0))[1] if isinstance(saved.get("srange"), tuple) else 0
+        
+        e_min = saved.get("erange", (0, 0))[0] if isinstance(saved.get("erange"), tuple) else 0
+        e_max = saved.get("erange", (0, 0))[1] if isinstance(saved.get("erange"), tuple) else 0
+
+        srange_min = c3.number_input("Min extra wait before first entry (seconds)", min_value=0, max_value=3600, value=int(s_min), step=5, key="srange_min")
+        srange_max = c3.number_input("Max extra wait before first entry (seconds)", min_value=0, max_value=3600, value=int(s_max), step=5, key="srange_max")
+        
+        erange_min = c4.number_input("Min extra time after end (seconds)", min_value=0, max_value=3600, value=int(e_min), step=5, key="erange_min")
+        erange_max = c4.number_input("Max extra time after end (seconds)", min_value=0, max_value=3600, value=int(e_max), step=5, key="erange_max")
+
+        # Combine into tuples for the rest of the logic
+        srange = (srange_min, srange_max)
+        erange = (erange_min, erange_max)
+
         schedule_preview(start, end, srange, erange)
 
     if st.button("Check everything  →", type="primary", width="stretch"):
