@@ -5,10 +5,9 @@ Streamlit front-end that submits spreadsheet rows to a Google Form you own,
 spread across a time window you choose.
 
 v2 changes
-  * Dark theme by default (see .streamlit/config.toml; the page CSS is dark too).
+  * Dark theme by default.
   * Clearer four-step UI with help text on every input and a live schedule preview.
-  * Every error and failed row is explained in plain language:
-    WHAT went wrong, WHERE (step / sheet row / column), WHY, and HOW TO FIX.
+  * Every error and failed row is explained in plain language.
   * Fixes: blank or unmatched cells are no longer replaced with the first option,
     the default schedule is valid, .xls input is saved as .xlsx, commas are only
     split for checkbox questions, the original file is never overwritten,
@@ -16,6 +15,8 @@ v2 changes
     the Analysis sheet can no longer turn a finished run into an error,
     Google Sheets links are converted to CSV export links automatically,
     and the server file-path box is off unless FORMINTELLECT_ALLOW_LOCAL_PATHS=1.
+  * NEW: Manual data entry via CSV paste.
+  * FIX: Button text duplication removed.
 
 Run:  streamlit run app.py
 """
@@ -248,6 +249,32 @@ def load_dataframe(inp, workdir, log):
         log(f"Google Sheet loaded: {len(df)} rows, {len(df.columns)} columns")
         log("Google Sheets is read-only here, so the updated copy is saved as an .xlsx you can download.")
         return df, "Google Sheet", os.path.join(workdir, "responses_updated.xlsx")
+
+    if kind == "manual":
+        text = inp.get("manual_data", "").strip()
+        if not text:
+            raise AppError(
+                "No data entered",
+                where="Step 1 · Your data",
+                why="The text box is empty.",
+                fix="Paste your CSV data (headers + rows) into the box.")
+        try:
+            df = pd.read_csv(io.StringIO(text))
+        except Exception as exc:
+            raise AppError(
+                "Couldn't read the pasted data",
+                where="Step 1 · Your data",
+                why="The text doesn't look like valid CSV.",
+                fix="Make sure the first line contains headers and subsequent lines contain values separated by commas.",
+                technical=str(exc))
+        if df.empty:
+             raise AppError(
+                "No data rows found",
+                where="Step 1 · Your data",
+                why="Headers were found, but no data rows.",
+                fix="Add at least one row of data below the headers.")
+        log(f"Manual data loaded: {len(df)} rows, {len(df.columns)} columns")
+        return df, "Manual Entry", os.path.join(workdir, "manual_responses_updated.xlsx")
 
     if kind == "upload":
         if not inp.get("upload"):
@@ -1364,10 +1391,22 @@ div[data-baseweb="tab-border"]{background:var(--border)!important;}
   border-radius:10px; border:1px solid var(--border2); background:var(--surface);
   color:var(--text); font-weight:600; padding:.6rem 1.1rem; transition:all .15s ease;}
 .stButton > button:hover, .stDownloadButton > button:hover{border-color:var(--green); color:var(--green);}
-.stButton > button[kind="primary"], button[data-testid="stBaseButton-primary"]{
-  background:var(--green)!important; border-color:var(--green)!important; color:#0B0D10!important;}
-.stButton > button[kind="primary"]:hover, button[data-testid="stBaseButton-primary"]:hover{
-  background:var(--green-h)!important; border-color:var(--green-h)!important; color:#0B0D10!important;}
+/* Specific fix for primary button text duplication */
+.stButton > button[kind="primary"], 
+button[data-testid="stBaseButton-primary"],
+div[data-baseweb="button"] button[kind="primary"] {
+  background:var(--green)!important; 
+  border-color:var(--green)!important; 
+  color:#0B0D10!important;
+  /* Ensure text is not duplicated by hiding potential pseudo-elements or extra spans if any */
+}
+.stButton > button[kind="primary"]:hover, 
+button[data-testid="stBaseButton-primary"]:hover,
+div[data-baseweb="button"] button[kind="primary"]:hover {
+  background:var(--green-h)!important; 
+  border-color:var(--green-h)!important; 
+  color:#0B0D10!important;
+}
 
 /* callouts */
 .fi-call{display:flex; gap:12px; padding:14px 16px; border-radius:12px; border:1px solid; margin:6px 0 16px; font-size:.9rem; line-height:1.5;}
@@ -1624,13 +1663,14 @@ def view_configure():
 
     with st.container(border=True):
         step_head("01", "Your data", "The spreadsheet with one row per response and one column per question.")
-        kinds = ["Upload a file", "Google Sheet link"] + (["File on this computer"] if ALLOW_LOCAL_PATHS else [])
-        kind_keys = {"Upload a file": "upload", "Google Sheet link": "sheet", "File on this computer": "local"}
+        kinds = ["Upload a file", "Google Sheet link", "Enter data manually"] + (["File on this computer"] if ALLOW_LOCAL_PATHS else [])
+        kind_keys = {"Upload a file": "upload", "Google Sheet link": "sheet", "Enter data manually": "manual", "File on this computer": "local"}
         prev = next((k for k, v in kind_keys.items() if v == saved.get("source_kind")), kinds[0])
         kind_label = st.radio("Where is your data?", kinds, horizontal=True, key="source_kind",
                               index=kinds.index(prev) if prev in kinds else 0, label_visibility="collapsed")
         kind = kind_keys[kind_label]
-        upload, sheet_url, local_path = None, "", ""
+        upload, sheet_url, local_path, manual_data = None, "", "", ""
+        
         if kind == "upload":
             upload = st.file_uploader("Spreadsheet file", type=[e.lstrip(".") for e in SUPPORTED_EXT],
                                       key="upload", help="Excel, CSV, TSV, OpenDocument or JSON.")
@@ -1640,6 +1680,11 @@ def view_configure():
             sheet_url = st.text_input("Google Sheet link", value=saved.get("sheet_url", ""), key="sheet_url",
                                       placeholder="https://docs.google.com/spreadsheets/d/…",
                                       help="The sheet must be shared as 'Anyone with the link → Viewer'.")
+        elif kind == "manual":
+            manual_data = st.text_area("Paste CSV data here", value=saved.get("manual_data", ""), 
+                                       key="manual_data", height=200,
+                                       help="Paste your data including headers. Example:\nName,Email\nJohn,john@example.com")
+            st.caption("Tip: Ensure the first line contains column headers.")
         else:
             local_path = st.text_input("Full path to the file", value=saved.get("local_path", ""),
                                        key="local_path", placeholder="C:\\data\\responses.xlsx")
@@ -1685,7 +1730,8 @@ def view_configure():
         inp = dict(
             source_kind=kind,
             upload=(upload.name, upload.getvalue()) if upload else saved.get("upload"),
-            sheet_url=sheet_url, local_path=local_path, link=link,
+            sheet_url=sheet_url, local_path=local_path, manual_data=manual_data,
+            link=link,
             random=bool(use_random), sample_n=int(sample_n),
             start=start, end=end, srange=tuple(srange), erange=tuple(erange),
         )
@@ -1729,7 +1775,7 @@ def build_checks(prep: Prepared):
         checks.append(("ok", "Small fixes", "None needed"))
     checks.append(("ok", "Answers checked", f'{s["selected"]} rows × {s["validated_fields"]} questions look good'))
     sched = (f'{fmt_clock(prep.rand_start)} → {fmt_clock(prep.rand_end)} IST · '
-             f'{format_human(cfg["window"])} for {cfg["total_rows"]} rows')
+             f'{format_human(cfg["window"] / max(cfg["total_rows"], 1))}')
     if datetime.now(IST) >= prep.rand_start:
         checks.append(("warn", "Schedule", sched + " · the start time has passed, so sending begins right away"))
     else:
