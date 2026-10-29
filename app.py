@@ -59,6 +59,67 @@ header[data-testid="stHeader"]{background:transparent;}
 #MainMenu, footer{visibility:hidden;}
 .block-container{max-width:960px; padding-top:2rem; padding-bottom:4rem;}
 [data-testid="stCaptionContainer"], .stCaption{color:var(--muted)!important;}
+
+/* Upload button styling */
+[data-testid="stFileUploaderDropzone"]{
+  background:var(--surface2)!important; 
+  border:2px dashed var(--border2)!important; 
+  border-radius:12px!important;
+  padding:2rem 1rem!important;
+  transition:all .2s ease;
+}
+[data-testid="stFileUploaderDropzone"]:hover{
+  border-color:var(--green)!important;
+  background:rgba(62,207,142,.05)!important;
+}
+[data-testid="stFileUploaderDropzone"] [data-testid="stBaseButton-secondary"]{
+  background:var(--green)!important;
+  color:#0B0D10!important;
+  border:none!important;
+  font-weight:600!important;
+  padding:.5rem 1rem!important;
+  border-radius:8px!important;
+}
+[data-testid="stFileUploaderDropzone"] [data-testid="stBaseButton-secondary"]:hover{
+  background:var(--green-h)!important;
+}
+[data-testid="stFileUploaderDropzone"] p{color:var(--muted)!important;}
+[data-testid="stFileUploaderDropzone"] small{color:var(--faint)!important;}
+
+/* Expander styling */
+[data-testid="stExpander"]{
+  background:var(--surface)!important;
+  border:1px solid var(--border)!important;
+  border-radius:12px!important;
+  margin:1rem 0!important;
+}
+[data-testid="stExpander"] summary{
+  background:var(--surface2)!important;
+  padding:1rem 1.25rem!important;
+  border-radius:12px!important;
+  cursor:pointer!important;
+}
+[data-testid="stExpander"] summary p{
+  color:var(--text)!important;
+  font-weight:600!important;
+  font-size:.95rem!important;
+  margin:0!important;
+}
+[data-testid="stExpander"] .streamlit-expanderContent{
+  background:var(--surface)!important;
+  padding:1.25rem!important;
+  border-top:1px solid var(--border)!important;
+}
+[data-testid="stExpander"] .streamlit-expanderContent p{
+  color:var(--muted)!important;
+  line-height:1.7!important;
+  margin-bottom:.75rem!important;
+}
+[data-testid="stExpander"] .streamlit-expanderContent strong{
+  color:var(--green)!important;
+  font-weight:600!important;
+}
+
 .fi-hero{display:flex; align-items:center; gap:14px; margin-bottom:4px;}
 .fi-logo{width:40px; height:40px; border-radius:11px; background:linear-gradient(135deg,#3ECF8E,#22A06B);
   display:flex; align-items:center; justify-content:center; box-shadow:0 6px 24px rgba(62,207,142,.25);
@@ -91,8 +152,6 @@ div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="sel
   background:var(--surface2)!important; border-color:var(--border2)!important; border-radius:10px!important;}
 div[data-baseweb="input"]:focus-within{border-color:var(--green)!important;}
 input, textarea{color:var(--text)!important;}
-[data-testid="stFileUploaderDropzone"]{background:var(--surface2); border:1px dashed var(--border2); border-radius:12px;}
-[data-testid="stFileUploaderDropzone"] *{color:var(--muted);}
 div[role="radiogroup"] label p{color:var(--text)!important; font-size:.9rem!important;}
 [data-testid="stSlider"] [role="slider"]{background:var(--green)!important; border-color:var(--green)!important;}
 [data-testid="stTickBarMin"], [data-testid="stTickBarMax"], [data-testid="stSliderThumbValue"]{color:var(--muted)!important;}
@@ -100,8 +159,6 @@ button[data-baseweb="tab"]{color:var(--muted); font-weight:500;}
 button[data-baseweb="tab"][aria-selected="true"]{color:var(--text);}
 div[data-baseweb="tab-highlight"]{background:var(--green)!important;}
 div[data-baseweb="tab-border"]{background:var(--border)!important;}
-[data-testid="stExpander"] details{background:var(--surface); border:1px solid var(--border)!important; border-radius:12px;}
-[data-testid="stExpander"] summary p{color:var(--muted)!important; font-size:.86rem;}
 [data-testid="stCode"] pre, .stCode pre{background:var(--surface2)!important; border:1px solid var(--border); border-radius:10px;}
 [data-testid="stCode"] code{color:#C9D1D9!important;}
 .stButton > button, .stDownloadButton > button{
@@ -191,8 +248,7 @@ div[data-baseweb="tab-border"]{background:var(--border)!important;}
   .fi-err-grid{grid-template-columns:1fr;}
   .fi-st .l{display:none;} .fi-st.active .l{display:inline;}
   .fi-tag{margin-left:0;}
-}
-"""
+}"""
 
 STAGES = [("configure", "Set up", "data, form, timing"), ("preflight", "Check", "review before sending"),
           ("execute", "Send", "live progress"), ("results", "Results", "summary & files")]
@@ -911,56 +967,161 @@ def view_configure():
         kind = kind_keys[kind_label]
         upload, sheet_url, local_path, manual_data = None, "", "", ""
         if kind == "upload":
-            upload = st.file_uploader("Spreadsheet file", type=[e.lstrip(".") for e in SUPPORTED_EXT], key="upload", help="Excel, CSV, TSV, etc.")
-            if not upload and saved.get("upload"): st.caption(f"Using earlier file: {saved['upload'][0]}")
+            st.markdown("###  Upload Your File")
+            upload = st.file_uploader(
+                "Choose a spreadsheet file", 
+                type=[e.lstrip(".") for e in SUPPORTED_EXT], 
+                key="upload", 
+                help="Supported formats: Excel (.xlsx, .xls), CSV, TSV, OpenDocument (.ods), or JSON"
+            )
+            if upload:
+                st.success(f"✅ File selected: **{upload.name}**")
+            if not upload and saved.get("upload"): 
+                st.info(f"📄 Using earlier file: **{saved['upload'][0]}**")
+            st.caption("💡 Tip: A column named **Status** automatically tracks which rows were already sent.")
         elif kind == "sheet":
-            sheet_url = st.text_input("Google Sheet link", value=saved.get("sheet_url", ""), key="sheet_url", placeholder="https://docs.google.com/spreadsheets/d/…", help="Share as 'Anyone with link'.")
+            sheet_url = st.text_input(
+                "🔗 Google Sheet Link", 
+                value=saved.get("sheet_url", ""), 
+                key="sheet_url", 
+                placeholder="https://docs.google.com/spreadsheets/d/…",
+                help="The sheet must be shared as 'Anyone with the link → Viewer'."
+            )
+            st.caption("💡 Tip: Make sure your Google Sheet is publicly accessible.")
         elif kind == "manual":
-            manual_data = st.text_area("Paste CSV data here", value=saved.get("manual_data", ""), key="manual_data", height=200, help="Include headers. Example:\nName,Email\nJohn,john@example.com")
-            st.caption("Tip: First line must be headers.")
+            manual_data = st.text_area(
+                "📝 Paste CSV Data", 
+                value=saved.get("manual_data", ""), 
+                key="manual_data", 
+                height=200,
+                placeholder="Name,Email,Age\nJohn,john@example.com,30\nJane,jane@example.com,25",
+                help="Paste your data with headers in CSV format (comma-separated values)."
+            )
+            st.caption("💡 Tip: First line must contain column headers.")
         else:
-            local_path = st.text_input("Full path to file", value=saved.get("local_path", ""), key="local_path", placeholder="C:\\data\\responses.xlsx")
-        st.caption("Tip: A column named **Status** tracks sent rows.")
+            local_path = st.text_input(
+                "📂 Full Path to File", 
+                value=saved.get("local_path", ""), 
+                key="local_path", 
+                placeholder="C:\\data\\responses.xlsx",
+                help="Enter the complete file path on this server."
+            )
+            st.caption(" Tip: Only available if FORMINTELLECT_ALLOW_LOCAL_PATHS=1")
 
     with st.container(border=True):
-        step_head("02", "Your Google Form", "Paste the pre-filled link.")
-        link = st.text_input("Pre-filled form link", value=saved.get("link", ""), key="link", placeholder="https://docs.google.com/forms/d/e/…/viewform?entry.123=…")
-        with st.expander("How do I get a pre-filled link?"):
-            md("1. Open form in Google Forms (edit mode).\n"
-               "2. Click **⋮** menu → **Get pre-filled link**.\n"
-               "3. Type any answer in every question.\n"
-               "4. Click **Get link** → **Copy link**, and paste above.\n\n"
-               "Columns should match question order or be named `entry.123456789`.")
+        step_head("02", "Your Google Form", "Paste the pre-filled link to map columns to questions.")
+        link = st.text_input(
+            "🔗 Pre-filled Form Link", 
+            value=saved.get("link", ""), 
+            key="link", 
+            placeholder="https://docs.google.com/forms/d/e/…/viewform?entry.123=…",
+            help="This link tells the app which column goes to which question."
+        )
+        
+        # Improved expander with better formatting
+        with st.expander("❓ How do I get a pre-filled link?", expanded=False):
+            st.markdown("""
+            **Follow these steps to create a pre-filled link:**
+            
+            1. **Open your form** in Google Forms (edit mode)
+            2. Click the **⋮ menu** (three dots) at the top right
+            3. Select **"Get pre-filled link"**
+            4. **Type any answer** in every question you want to fill automatically
+            5. Click **"Get link"** at the bottom
+            6. Click **"Copy link"** and paste it above
+            
+            **Important:** 
+            - Your spreadsheet columns should match the **order of questions** in the form
+            - OR you can name columns like `entry.123456789` to match specific questions
+            - The link will look like: `https://docs.google.com/forms/.../viewform?entry.123=...`
+            """)
 
     with st.container(border=True):
-        step_head("03", "Which rows", "Rows marked 'submitted' are skipped.")
-        use_random = st.toggle("Pick rows at random", value=bool(saved.get("random", False)), key="random", help="Off: top to bottom. On: random order.")
+        step_head("03", "Which rows", "Rows marked 'submitted' are automatically skipped.")
+        use_random = st.toggle(
+            " Pick rows at random", 
+            value=bool(saved.get("random", False)), 
+            key="random", 
+            help="Off: sends rows top to bottom\nOn: sends rows in random order"
+        )
         sample_n = 0
-        if use_random: sample_n = st.number_input("How many rows (0 = all)", min_value=0, step=1, value=int(saved.get("sample_n", 0)), key="sample_n")
+        if use_random: 
+            sample_n = st.number_input(
+                "How many rows to send?", 
+                min_value=0, 
+                step=1, 
+                value=int(saved.get("sample_n", 0)), 
+                key="sample_n",
+                help="Enter 0 to send all pending rows"
+            )
 
     with st.container(border=True):
-        step_head("04", "When to submit", "Entries spread randomly between these times (IST).")
+        step_head("04", "When to submit", "Entries are spread randomly between these times (India time, IST).")
         c1, c2 = st.columns(2)
-        start = c1.time_input("Start time", value=saved.get("start", dtime(9, 0)), step=60, key="start")
-        end = c2.time_input("End time", value=saved.get("end", dtime(11, 0)), step=60, key="end", help="If end < start, runs past midnight.")
+        start = c1.time_input(
+            " Start time", 
+            value=saved.get("start", dtime(9, 0)), 
+            step=60, 
+            key="start",
+            help="When to begin sending submissions"
+        )
+        end = c2.time_input(
+            "🕐 End time", 
+            value=saved.get("end", dtime(11, 0)), 
+            step=60, 
+            key="end",
+            help="When to finish (if earlier than start, continues past midnight)"
+        )
         c3, c4 = st.columns(2)
         s_min = saved.get("srange", (0, 0))[0] if isinstance(saved.get("srange"), tuple) else 0
         s_max = saved.get("srange", (0, 0))[1] if isinstance(saved.get("srange"), tuple) else 0
         e_min = saved.get("erange", (0, 0))[0] if isinstance(saved.get("erange"), tuple) else 0
         e_max = saved.get("erange", (0, 0))[1] if isinstance(saved.get("erange"), tuple) else 0
-        srange_min = c3.number_input("Min extra wait before first entry (seconds)", min_value=0, max_value=3600, value=int(s_min), step=5, key="srange_min")
-        srange_max = c3.number_input("Max extra wait before first entry (seconds)", min_value=0, max_value=3600, value=int(s_max), step=5, key="srange_max")
-        erange_min = c4.number_input("Min extra time after end (seconds)", min_value=0, max_value=3600, value=int(e_min), step=5, key="erange_min")
-        erange_max = c4.number_input("Max extra time after end (seconds)", min_value=0, max_value=3600, value=int(e_max), step=5, key="erange_max")
+        srange_min = c3.number_input(
+            "⏱️ Min extra wait (seconds)", 
+            min_value=0, 
+            max_value=3600, 
+            value=int(s_min), 
+            step=5, 
+            key="srange_min",
+            help="Minimum random delay before first entry"
+        )
+        srange_max = c3.number_input(
+            "⏱️ Max extra wait (seconds)", 
+            min_value=0, 
+            max_value=3600, 
+            value=int(s_max), 
+            step=5, 
+            key="srange_max",
+            help="Maximum random delay before first entry"
+        )
+        erange_min = c4.number_input(
+            "️ Min extra time after end", 
+            min_value=0, 
+            max_value=3600, 
+            value=int(e_min), 
+            step=5, 
+            key="erange_min",
+            help="Minimum random extension after end time"
+        )
+        erange_max = c4.number_input(
+            "⏱️ Max extra time after end", 
+            min_value=0, 
+            max_value=3600, 
+            value=int(e_max), 
+            step=5, 
+            key="erange_max",
+            help="Maximum random extension after end time"
+        )
         srange = (srange_min, srange_max)
         erange = (erange_min, erange_max)
         schedule_preview(start, end, srange, erange)
 
-    if st.button("Check everything →", type="primary", width="stretch"):
+    if st.button("✅ Check everything →", type="primary", width="stretch", use_container_width=True):
         inp = dict(source_kind=kind, upload=(upload.name, upload.getvalue()) if upload else saved.get("upload"), sheet_url=sheet_url, local_path=local_path, manual_data=manual_data, link=link, random=bool(use_random), sample_n=int(sample_n), start=start, end=end, srange=tuple(srange), erange=tuple(erange))
         st.session_state.inp = inp
         try:
-            with st.spinner("Reading data and checking form…"):
+            with st.spinner(" Reading data and checking form…"):
                 st.session_state.prep = prepare(inp, st.session_state.workdir)
             st.rerun()
         except AppError as exc: show_error(exc)
