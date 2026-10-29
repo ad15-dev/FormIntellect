@@ -1,15 +1,32 @@
 import sys
 import os
 
-# Ensure the current directory is in the Python path so local modules can be found
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add current directory to path for local module imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 import streamlit as st
 import tempfile
 
-# Now import from local files
-from utils import CSS
-from ui import inject_css, view_configure, view_preflight, view_execute, view_results, stepper
+# Import everything at the top level with error handling
+try:
+    from utils import CSS, md
+    from ui import inject_css, view_configure, view_preflight, view_execute, view_results, stepper
+except ImportError as e:
+    st.error(f"❌ Failed to import modules: {e}")
+    st.error(f"Current directory: {os.getcwd()}")
+    st.error(f"Script directory: {current_dir}")
+    st.error(f"Python path: {sys.path}")
+    
+    # List files in current directory
+    try:
+        files = os.listdir(current_dir)
+        st.error(f"Files in directory: {files}")
+    except Exception as list_err:
+        st.error(f"Cannot list directory: {list_err}")
+    
+    st.stop()
 
 def current_stage():
     job = st.session_state.get("job")
@@ -23,9 +40,6 @@ def main():
     
     if "workdir" not in st.session_state:
         st.session_state.workdir = tempfile.mkdtemp(prefix="formintellect_")
-    
-    # Import md here to avoid circular dependency issues if any
-    from utils import md
     
     md('<div class="fi-hero"><div class="fi-logo">✓</div>'
        '<div class="fi-name">Form<span>Intellect</span></div></div>'
