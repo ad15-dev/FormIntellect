@@ -1694,7 +1694,8 @@ def view_configure():
         step_head("02", "Your Google Form", "Paste the form's pre-filled link so we know which column goes to which question.")
         link = st.text_input("Pre-filled form link", value=saved.get("link", ""), key="link",
                              placeholder="https://docs.google.com/forms/d/e/…/viewform?entry.123=…")
-        with st.expander("How do I get a pre-filled link?"):
+        
+     with st.expander("How do I get a pre-filled link?"):
             md("1. Open your form in Google Forms (edit mode).\n"
                "2. Click the **⋮** menu at the top right → **Get pre-filled link**.\n"
                "3. Type any answer in every question you want to fill.\n"
@@ -1738,7 +1739,7 @@ def view_configure():
 
         schedule_preview(start, end, srange, erange)
 
-    if st.button("Check everything  →", type="primary", width="stretch"):
+            if st.button("Check everything →", type="primary", width="stretch"):
         inp = dict(
             source_kind=kind,
             upload=(upload.name, upload.getvalue()) if upload else saved.get("upload"),
