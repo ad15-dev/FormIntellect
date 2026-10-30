@@ -584,10 +584,10 @@ def compute_time_window(start_t, end_t, start_range, end_range, total_rows, log)
         if original_window_sec < min_required_sec: raise AppError("Window too short", where="Step 4", why=f"{total_rows} rows need {format_human(min_required_sec)}.", fix="Increase window.")
         raise AppError("Random delays invalid", where="Step 4", why="Offsets make window shorter than entered.", fix="Adjust ranges.")
     log("========== TIME CONFIGURATION ==========")
-    log(f"Entered start: {start_dt.strftime('%d-%m-%Y %I:%M %p IST')}")
-    log(f"Entered end: {end_dt.strftime('%d-%m-%Y %I:%M %p IST')}")
-    log(f"Actual start: {rand_start.strftime('%d-%m-%Y %I:%M %p IST')}")
-    log(f"Actual end: {rand_end.strftime('%d-%m-%Y %I:%M %p IST')}")
+    log(f"Entered start: {start_dt.strftime('%d-%m-%Y %I:%M:%S %p IST')}")
+    log(f"Entered end: {end_dt.strftime('%d-%m-%Y %I:%M:%S %p IST')}")
+    log(f"Actual start: {rand_start.strftime('%d-%m-%Y %I:%M:%S %p IST')}")
+    log(f"Actual end: {rand_end.strftime('%d-%m-%Y %I:%M:%S %p IST')}")
     log(f"Rows: {total_rows}")
     log("========================================")
     cfg = dict(entered_start=start_dt, entered_end=end_dt, rs=rs, re=re_, rand_start=rand_start, rand_end=rand_end, original_window=original_window_sec, window=window_sec, min_required=min_required_sec, total_rows=total_rows)
@@ -664,7 +664,7 @@ def generate_analysis_sheet(df, file_path, submitted_count, log):
     ws["A1"] = "Response Analysis"
     ws["A1"].fill = solid(NAVY); ws["A1"].font = Font(bold=True, color=WHITE, size=14); ws["A1"].alignment = ctr
     ws.row_dimensions[1].height = 28
-    ws["A2"] = f"Generated: {datetime.now(IST).strftime('%d-%m-%Y %I:%M %p')}"
+    ws["A2"] = f"Generated: {datetime.now(IST).strftime('%d-%m-%Y %I:%M:%S %p')}"
     ws["B2"] = f"Total rows: {len(df)}"
     ws["C2"] = f"Submitted: {submitted_count}"
     analysis_cols = [c for c in df.columns if str(c).strip().lower() not in STATUS_NAMES]
@@ -906,46 +906,85 @@ def render_execution_table(rows):
         if kind == "ok":
             status = "Successful"
             next_time = f"{r.get('gap_sec', 0)}s"
-            status_class = "status-ok"
         elif kind == "final":
             status = "Successful"
             next_time = "Completed"
-            status_class = "status-ok"
         elif kind == "fail":
             status = "Failed"
             next_time = "N/A"
-            status_class = "status-fail"
         else:
             status = kind.capitalize()
             next_time = "N/A"
-            status_class = ""
         table_rows.append([sr_no, r.get("row", "-"), status, next_time])
         sr_no += 1
     if table_rows:
-        html_table(["SR No.", "Row No.", "Status", "Next Entry (s)"], table_rows, ["mono", "mono", status_class, "mono"])
+        html_table(["SR No.", "Row No.", "Status", "Next Entry (s)"], table_rows, ["mono", "mono", "", "mono"])
+
+def view_configure():
+    saved = st.session_state.get("inp", {})
+    section_head("Setup Your Run", "Complete these four steps. Nothing is sent until you review everything.")
+    
+    with st.container(border=True):
+        step_head("01", "Your Data", "Provide your spreadsheet with one row per response.")
+        kinds = ["Upload a file", "Google Sheet link", "Enter data manually"] + (["File on this computer"] if ALLOW_LOCAL_PATHS else [])
+        kind_keys = {"Upload a file": "upload", "Google Sheet link": "sheet", "Enter data manually": "manual", "File on this computer": "local"}
+        prev = next((k for k, v in kind_keys.items() if v == saved.get("source_kind")), kinds[0])
+        kind_label = st.radio("Data Source", kinds, horizontal=True, key="source_kind", index=kinds.index(prev) if prev in kinds else 0, label_visibility="collapsed")
+        kind = kind_keys[kind_label]
+        upload, sheet_url, local_path, manual_data = None, "", "", ""
+        
+        if kind == "upload":
+            upload = st.file_uploader("Choose a spreadsheet file", type=[e.lstrip(".") for e in SUPPORTED_EXT], key="upload", help="Supported: Excel, CSV, TSV, OpenDocument, JSON")
+            if upload: st.success(f"File selected: {upload.name}")
+            elif saved.get("upload"): st.info(f"Using previous file: {saved['upload'][0]}")
+            st.caption("Tip: Include a 'Status' column to track sent rows.")
+        elif kind == "sheet":
+            sheet_url = st.text_input("Google Sheet Link", value=saved.get("sheet_url", ""), key="sheet_url", placeholder="https://docs.google.com/spreadsheets/d/...", help="Sheet must be shared as 'Anyone with link'")
+            st.caption("Tip: Make sure your Google Sheet is publicly accessible.")
+        elif kind == "manual":
+            manual_data = st.text_area("Paste CSV Data", value=saved.get("manual_data", ""), key="manual_data", height=200, placeholder="Name,Email,Age\nJohn,john@example.com,30", help="Include headers in first row")
+            st.caption("Tip: First line must contain column headers.")
+        else:
+            local_path = st.text_input("Full File Path", value=saved.get("local_path", ""), key="local_path", placeholder="C:\\data\\responses.xlsx")
+            st.caption("Only available if FORMINTELLECT_ALLOW_LOCAL_PATHS=1")
+
+        df_temp = None
+        if kind == "upload" and upload:
+            try: df_temp = pd.read_csv(io.BytesIO(upload.getvalue())) if upload.name.lower().endswith('.csv') else pd.read_excel(io.BytesIO(upload.getvalue()))
+            except: pass
+        elif kind == "manual" and manual_data:
+            try: df_temp = pd.read_csv(io.StringIO(manual_data))
+            except: pass
+        
+        if df_temp is not None and not df_temp.empty:
+            total_rows = len(df_temp)
+            min_time_sec = total_rows * MIN_SECONDS_PER_ROW
+            md(f'''
+            <div class="fi-calc">
+                <div><div class="k">Total Rows Detected</div><div class="v">{total_rows}</div><div class="sub">data rows in your file</div></div>
+                <div><div class="k">Min Execution Time</div><div class="v">{format_human(min_time_sec)}</div><div class="sub">at {MIN_SECONDS_PER_ROW}s per row minimum</div></div>
+            </div>''')
+
+    with st.container(border=True):
+        step_head("02", "Your Google Form", "Paste the pre-filled link to map columns to questions.")
+        link = st.text_input("Pre-filled Form Link", value=saved.get("link", ""), key="link", placeholder="https://docs.google.com/forms/d/e/.../viewform?entry.123=...", help="This tells the app which column goes to which question")
+        with st.expander("How to get a pre-filled link"):
+            st.markdown("""**Follow these steps:**\n\n1. Open your form in Google Forms (edit mode)\n2. Click the **⋮ menu** (three dots) at the top right\n3. Select **"Get pre-filled link"**\n4. Type any answer in every question\n5. Click **"Get link"** then **"Copy link"**\n6. Paste the link above\n\n**Important:** Your spreadsheet columns should match the order of questions in the form, or be named like `entry.123456789`.""")
+
+    with st.container(border=True):
+        step_head("03", "Which Rows", "Rows marked 'submitted' are automatically skipped.")
+        use_random = st.toggle("Pick rows at random", value=bool(saved.get("random", False)), key="random", help="Off: top to bottom. On: random order.")
+        sample_n = 0
+        if use_random: sample_n = st.number_input("How many rows to send?", min_value=0, step=1, value=int(saved.get("sample_n", 0)), key="sample_n", help="Enter 0 to send all pending rows")
 
     with st.container(border=True):
         step_head("04", "When to Submit", "Entries spread randomly between these times (IST).")
         c1, c2 = st.columns(2)
-        
-        # Updated to allow seconds (step=1) and indicate 12-hour format in label
-        start = c1.time_input(
-            "Start Time (12-hour, HH:MM:SS)", 
-            value=saved.get("start", dtime(9, 0)), 
-            step=1, 
-            key="start"
-        )
-        end = c2.time_input(
-            "End Time (12-hour, HH:MM:SS)", 
-            value=saved.get("end", dtime(11, 0)), 
-            step=1, 
-            key="end",
-            help="If earlier than start, continues past midnight"
-        )
+        start = c1.time_input("Start Time (12-hour, HH:MM:SS)", value=saved.get("start", dtime(9, 0)), step=1, key="start")
+        end = c2.time_input("End Time (12-hour, HH:MM:SS)", value=saved.get("end", dtime(11, 0)), step=1, key="end", help="If earlier than start, continues past midnight")
         
         st.markdown("---")
         
-        # Start Delay Container
         with st.container(border=True):
             st.markdown("### Start Delay")
             st.caption("Random delay added before the first entry starts.")
@@ -955,7 +994,6 @@ def render_execution_table(rows):
             srange_min = sc1.number_input("Min extra wait (seconds)", min_value=0, max_value=3600, value=int(s_min), step=5, key="srange_min")
             srange_max = sc2.number_input("Max extra wait (seconds)", min_value=0, max_value=3600, value=int(s_max), step=5, key="srange_max")
             
-        # End Delay Container
         with st.container(border=True):
             st.markdown("### End Delay")
             st.caption("Random delay added after the scheduled end time.")
@@ -968,6 +1006,16 @@ def render_execution_table(rows):
         srange = (srange_min, srange_max)
         erange = (erange_min, erange_max)
         schedule_preview(start, end, srange, erange)
+
+    if st.button("Check Everything", type="primary", width="stretch"):
+        inp = dict(source_kind=kind, upload=(upload.name, upload.getvalue()) if upload else saved.get("upload"), sheet_url=sheet_url, local_path=local_path, manual_data=manual_data, link=link, random=bool(use_random), sample_n=int(sample_n), start=start, end=end, srange=tuple(srange), erange=tuple(erange))
+        st.session_state.inp = inp
+        try:
+            with st.spinner("Reading data and checking form..."):
+                st.session_state.prep = prepare(inp, st.session_state.workdir)
+            st.rerun()
+        except AppError as exc: show_error(exc)
+        except Exception as exc: error_card(**explain_exception(exc), where="While checking setup")
 
 def build_checks(prep: Prepared):
     s, cfg = prep.summary, prep.time_cfg
