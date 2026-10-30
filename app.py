@@ -188,9 +188,6 @@ input, textarea, select { color: var(--text-primary) !important; font-size: 0.95
 .fi-calc .v { font-family: monospace; font-size: 1.25rem; font-weight: 700; margin-top: 0.25rem; color: var(--primary); }
 .fi-calc .sub { font-size: 0.75rem; color: var(--muted-fg); margin-top: 0.25rem; }
 
-.time-picker-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
-.time-picker-row > * { flex: 1; }
-
 @media (max-width: 768px) {
   .fi-stats, .fi-calc { grid-template-columns: repeat(2, 1fr); }
   .fi-err-grid { grid-template-columns: 1fr; }
@@ -282,35 +279,34 @@ def format_human(seconds):
 def fmt_clock(dt): 
     return dt.strftime("%I:%M:%S %p").lstrip("0")
 
-# Custom 12-hour AM/PM time picker in a single compact row
-def get_time_12h_compact(label, default_time, key_base):
-    st.markdown(f"**{label}**")
-    
-    if default_time is None:
-        default_time = datetime.now(IST).time()
+# Custom 12-hour AM/PM time picker inside a single bordered cell
+def get_time_12h(label, default_time, key_base):
+    with st.container(border=True):
+        st.markdown(f"**{label}**")
+        c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
         
-    h, m, s = default_time.hour, default_time.minute, default_time.second
-    period = "AM" if h < 12 else "PM"
-    h12 = h % 12
-    if h12 == 0: h12 = 12
-    
-    c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
-    
-    with c1:
-        hour = st.number_input("Hour", 1, 12, h12, key=f"{key_base}_h", label_visibility="collapsed")
-    with c2:
-        minute = st.number_input("Min", 0, 59, m, key=f"{key_base}_m", label_visibility="collapsed")
-    with c3:
-        second = st.number_input("Sec", 0, 59, s, key=f"{key_base}_s", label_visibility="collapsed")
-    with c4:
-        ampm = st.selectbox("AM/PM", ["AM", "PM"], index=0 if period=="AM" else 1, key=f"{key_base}_p", label_visibility="collapsed")
+        if default_time is None:
+            default_time = datetime.now(IST).time()
+            
+        h, m, s = default_time.hour, default_time.minute, default_time.second
+        period = "AM" if h < 12 else "PM"
+        h12 = h % 12
+        if h12 == 0: h12 = 12
         
-    # Convert 12h back to 24h for the backend logic
-    final_h = hour
-    if ampm == "PM" and hour != 12: final_h += 12
-    if ampm == "AM" and hour == 12: final_h = 0
-    
-    return dtime(final_h, minute, second)
+        with c1:
+            hour = st.number_input("Hour", 1, 12, h12, key=f"{key_base}_h", label_visibility="collapsed")
+        with c2:
+            minute = st.number_input("Min", 0, 59, m, key=f"{key_base}_m", label_visibility="collapsed")
+        with c3:
+            second = st.number_input("Sec", 0, 59, s, key=f"{key_base}_s", label_visibility="collapsed")
+        with c4:
+            ampm = st.selectbox("AM/PM", ["AM", "PM"], index=0 if period=="AM" else 1, key=f"{key_base}_p", label_visibility="collapsed")
+            
+        final_h = hour
+        if ampm == "PM" and hour != 12: final_h += 12
+        if ampm == "AM" and hour == 12: final_h = 0
+        
+        return dtime(final_h, minute, second)
 
 # ============================================================
 #  ERRORS & DATA LOADING
@@ -759,7 +755,7 @@ class Prepared:
 
 def check_link(link):
     link = link.strip()
-    how = "Open form →  menu → 'Get pre-filled link' → Fill answers → 'Get link' → Copy."
+    how = "Open form → ⋮ menu → 'Get pre-filled link' → Fill answers → 'Get link' → Copy."
     if not link: raise AppError("No form link", where="Step 2", why="Box empty.", fix=how)
     if "/viewform" not in link or not link.startswith("http"): raise AppError("Invalid link", where="Step 2", why="Not a pre-filled link.", fix=how, technical=link)
     if not extract_entry_ids(link): raise AppError("No entry IDs", where="Step 2", why="Link missing 'entry.' values.", fix=how, technical=link)
@@ -1017,13 +1013,12 @@ def view_configure():
         current_time = now_ist.time()
         default_end_time = (now_ist + timedelta(hours=1)).time()
 
-        # Start Time in its own container
-        with st.container(border=True):
-            start = get_time_12h_compact("Start Time", saved.get("start", current_time), "start_time")
-        
-        # End Time in its own container
-        with st.container(border=True):
-            end = get_time_12h_compact("End Time", saved.get("end", default_end_time), "end_time")
+        # Use the custom 12-hour AM/PM picker in separate single cells
+        c1, c2 = st.columns(2)
+        with c1:
+            start = get_time_12h("Start Time", saved.get("start", current_time), "start_time")
+        with c2:
+            end = get_time_12h("End Time", saved.get("end", default_end_time), "end_time")
         
         st.markdown("---")
         
