@@ -197,7 +197,7 @@ input, textarea { color: var(--text-primary) !important; font-size: 0.95rem; }
 }
 """
 
-STAGES = [("configure", "Setup", "Data & Form"), ("preflight", "Review", "Check Details"),
+STAGES = [("configure", "Setup", "Data & Form"), ("preflight", "Re", "Check Details"),
           ("execute", "Running", "Live Progress"), ("results", "Done", "Summary")]
 
 STATUS_LABEL = {
@@ -729,7 +729,7 @@ def check_link(link):
     link = link.strip()
     how = "Open form → ⋮ menu → 'Get pre-filled link' → Fill answers → 'Get link' → Copy."
     if not link: raise AppError("No form link", where="Step 2", why="Box empty.", fix=how)
-    if "/viewform" not in link or not link.startswith("http"): raise AppError("Invalid link", where="Step 2", why="Not a pre-filled link.", fix=how, technical=link)
+    if "/form" not in link or not link.startswith("http"): raise AppError("Invalid link", where="Step 2", why="Not a pre-filled link.", fix=how, technical=link)
     if not extract_entry_ids(link): raise AppError("No entry IDs", where="Step 2", why="Link missing 'entry.' values.", fix=how, technical=link)
     return link
 
@@ -748,7 +748,7 @@ def prepare(inp: dict, workdir: str) -> Prepared:
     lines: list = []
     log = lines.append
     prefilled_link = check_link(inp["link"])
-    form_url = prefilled_link.split("/viewform")[0] + "/formResponse"
+    form_url = prefilled_link.split("/form")[0] + "/formResponse"
     df, source_label, output_path = load_dataframe(inp, workdir, log)
     if df.empty: raise AppError("No rows", where="Step 1", why="Only headers found.", fix="Add data.")
     df.columns = [str(c).strip() for c in df.columns]
@@ -924,6 +924,12 @@ def view_configure():
     saved = st.session_state.get("inp", {})
     section_head("Setup Your Run", "Complete these four steps. Nothing is sent until you review everything.")
     
+    # Calculate current IST time for dynamic defaults
+    now_ist = datetime.now(IST)
+    current_time = now_ist.time()
+    # Set end time to 1 hour from now by default if no previous value exists
+    default_end_time = (now_ist + timedelta(hours=1)).time()
+    
     with st.container(border=True):
         step_head("01", "Your Data", "Provide your spreadsheet with one row per response.")
         kinds = ["Upload a file", "Google Sheet link", "Enter data manually"] + (["File on this computer"] if ALLOW_LOCAL_PATHS else [])
@@ -980,8 +986,21 @@ def view_configure():
     with st.container(border=True):
         step_head("04", "When to Submit", "Entries spread randomly between these times (IST).")
         c1, c2 = st.columns(2)
-        start = c1.time_input("Start Time (12-hour, HH:MM:SS)", value=saved.get("start", dtime(9, 0)), step=1, key="start")
-        end = c2.time_input("End Time (12-hour, HH:MM:SS)", value=saved.get("end", dtime(11, 0)), step=1, key="end", help="If earlier than start, continues past midnight")
+        
+        # Use current IST time as default instead of hardcoded 9:00 / 11:00
+        start = c1.time_input(
+            "Start Time (12-hour, HH:MM:SS)", 
+            value=saved.get("start", current_time), 
+            step=1, 
+            key="start"
+        )
+        end = c2.time_input(
+            "End Time (12-hour, HH:MM:SS)", 
+            value=saved.get("end", default_end_time), 
+            step=1, 
+            key="end",
+            help="If earlier than start, continues past midnight"
+        )
         
         st.markdown("---")
         
