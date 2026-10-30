@@ -892,18 +892,15 @@ def schedule_preview(start_t, end_t, srange, erange):
        '</div>')
     if datetime.now(IST) > s_hi: st.caption("Start time passed, sending begins immediately.")
 
-# NEW: Execution Table replacing the old feed
 def render_execution_table(rows):
     if not rows:
         st.caption("No entries processed yet.")
         return
-
     table_rows = []
     sr_no = 1
     for r in rows:
         kind = r["kind"]
-        if kind == "note": continue # Skip system notes
-        
+        if kind == "note": continue
         if kind == "ok":
             status = "Successful"
             next_time = f"{r.get('gap_sec', 0)}s"
@@ -920,10 +917,8 @@ def render_execution_table(rows):
             status = kind.capitalize()
             next_time = "N/A"
             status_class = ""
-
         table_rows.append([sr_no, r.get("row", "-"), status, next_time])
         sr_no += 1
-
     if table_rows:
         html_table(["SR No.", "Row No.", "Status", "Next Entry (s)"], table_rows, ["mono", "mono", status_class, "mono"])
 
@@ -976,7 +971,7 @@ def view_configure():
         step_head("02", "Your Google Form", "Paste the pre-filled link to map columns to questions.")
         link = st.text_input("Pre-filled Form Link", value=saved.get("link", ""), key="link", placeholder="https://docs.google.com/forms/d/e/.../viewform?entry.123=...", help="This tells the app which column goes to which question")
         with st.expander("How to get a pre-filled link"):
-            st.markdown("""**Follow these steps:**\n\n1. Open your form in Google Forms (edit mode)\n2. Click the ** menu** (three dots) at the top right\n3. Select **"Get pre-filled link"**\n4. Type any answer in every question\n5. Click **"Get link"** then **"Copy link"**\n6. Paste the link above\n\n**Important:** Your spreadsheet columns should match the order of questions in the form, or be named like `entry.123456789`.""")
+            st.markdown("""**Follow these steps:**\n\n1. Open your form in Google Forms (edit mode)\n2. Click the **⋮ menu** (three dots) at the top right\n3. Select **"Get pre-filled link"**\n4. Type any answer in every question\n5. Click **"Get link"** then **"Copy link"**\n6. Paste the link above\n\n**Important:** Your spreadsheet columns should match the order of questions in the form, or be named like `entry.123456789`.""")
 
     with st.container(border=True):
         step_head("03", "Which Rows", "Rows marked 'submitted' are automatically skipped.")
@@ -989,15 +984,29 @@ def view_configure():
         c1, c2 = st.columns(2)
         start = c1.time_input("Start Time", value=saved.get("start", dtime(9, 0)), step=60, key="start")
         end = c2.time_input("End Time", value=saved.get("end", dtime(11, 0)), step=60, key="end", help="If earlier than start, continues past midnight")
-        c3, c4 = st.columns(2)
-        s_min = saved.get("srange", (0, 0))[0] if isinstance(saved.get("srange"), tuple) else 0
-        s_max = saved.get("srange", (0, 0))[1] if isinstance(saved.get("srange"), tuple) else 0
-        e_min = saved.get("erange", (0, 0))[0] if isinstance(saved.get("erange"), tuple) else 0
-        e_max = saved.get("erange", (0, 0))[1] if isinstance(saved.get("erange"), tuple) else 0
-        srange_min = c3.number_input("Min extra wait (seconds)", min_value=0, max_value=3600, value=int(s_min), step=5, key="srange_min")
-        srange_max = c3.number_input("Max extra wait (seconds)", min_value=0, max_value=3600, value=int(s_max), step=5, key="srange_max")
-        erange_min = c4.number_input("Min extra time after end", min_value=0, max_value=3600, value=int(e_min), step=5, key="erange_min")
-        erange_max = c4.number_input("Max extra time after end", min_value=0, max_value=3600, value=int(e_max), step=5, key="erange_max")
+        
+        st.markdown("---")
+        
+        # Start Delay Container
+        with st.container(border=True):
+            st.markdown("### Start Delay")
+            st.caption("Random delay added before the first entry starts.")
+            sc1, sc2 = st.columns(2)
+            s_min = saved.get("srange", (0, 0))[0] if isinstance(saved.get("srange"), tuple) else 0
+            s_max = saved.get("srange", (0, 0))[1] if isinstance(saved.get("srange"), tuple) else 0
+            srange_min = sc1.number_input("Min extra wait (seconds)", min_value=0, max_value=3600, value=int(s_min), step=5, key="srange_min")
+            srange_max = sc2.number_input("Max extra wait (seconds)", min_value=0, max_value=3600, value=int(s_max), step=5, key="srange_max")
+            
+        # End Delay Container
+        with st.container(border=True):
+            st.markdown("### End Delay")
+            st.caption("Random delay added after the scheduled end time.")
+            ec1, ec2 = st.columns(2)
+            e_min = saved.get("erange", (0, 0))[0] if isinstance(saved.get("erange"), tuple) else 0
+            e_max = saved.get("erange", (0, 0))[1] if isinstance(saved.get("erange"), tuple) else 0
+            erange_min = ec1.number_input("Min extra time after end (seconds)", min_value=0, max_value=3600, value=int(e_min), step=5, key="erange_min")
+            erange_max = ec2.number_input("Max extra time after end (seconds)", min_value=0, max_value=3600, value=int(e_max), step=5, key="erange_max")
+            
         srange = (srange_min, srange_max)
         erange = (erange_min, erange_max)
         schedule_preview(start, end, srange, erange)
@@ -1076,7 +1085,6 @@ def render_monitor(job: Job):
         callout("err", f"<b>{len(s['failures'])} row(s) failed.</b> Failed rows stay pending.")
         render_failures(s["failures"])
     
-    # Render the new Execution Table
     md('<div class="fi-tbl-h"><span>Execution Log</span><span>{0} entries</span></div>'.format(len([r for r in s["rows"] if r["kind"] != "note"])))
     render_execution_table(s["rows"])
 
@@ -1105,7 +1113,6 @@ def view_results(job: Job):
         render_failures(s["failures"])
         with st.expander("Technical Details"): st.code("\n\n".join(f"Row {f['row']}:\n{f['technical']}" for f in s["failures"]), language=None)
     
-    # Render the final Execution Table
     md('<div class="fi-tbl-h"><span>Final Execution Log</span><span>{0} entries</span></div>'.format(len([r for r in s["rows"] if r["kind"] != "note"])))
     render_execution_table(s["rows"])
 
