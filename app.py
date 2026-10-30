@@ -188,6 +188,9 @@ input, textarea, select { color: var(--text-primary) !important; font-size: 0.95
 .fi-calc .v { font-family: monospace; font-size: 1.25rem; font-weight: 700; margin-top: 0.25rem; color: var(--primary); }
 .fi-calc .sub { font-size: 0.75rem; color: var(--muted-fg); margin-top: 0.25rem; }
 
+.time-picker-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+.time-picker-row > * { flex: 1; }
+
 @media (max-width: 768px) {
   .fi-stats, .fi-calc { grid-template-columns: repeat(2, 1fr); }
   .fi-err-grid { grid-template-columns: 1fr; }
@@ -277,13 +280,11 @@ def format_human(seconds):
     return f"{s}s"
 
 def fmt_clock(dt): 
-    # Returns time in 12-hour format with seconds and AM/PM (e.g., 12:39:00 PM)
     return dt.strftime("%I:%M:%S %p").lstrip("0")
 
-# Custom 12-hour AM/PM time picker to bypass browser locale settings
-def get_time_12h(label, default_time, key_base):
+# Custom 12-hour AM/PM time picker in a single compact row
+def get_time_12h_compact(label, default_time, key_base):
     st.markdown(f"**{label}**")
-    c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
     
     if default_time is None:
         default_time = datetime.now(IST).time()
@@ -292,6 +293,8 @@ def get_time_12h(label, default_time, key_base):
     period = "AM" if h < 12 else "PM"
     h12 = h % 12
     if h12 == 0: h12 = 12
+    
+    c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
     
     with c1:
         hour = st.number_input("Hour", 1, 12, h12, key=f"{key_base}_h", label_visibility="collapsed")
@@ -756,7 +759,7 @@ class Prepared:
 
 def check_link(link):
     link = link.strip()
-    how = "Open form → ⋮ menu → 'Get pre-filled link' → Fill answers → 'Get link' → Copy."
+    how = "Open form →  menu → 'Get pre-filled link' → Fill answers → 'Get link' → Copy."
     if not link: raise AppError("No form link", where="Step 2", why="Box empty.", fix=how)
     if "/viewform" not in link or not link.startswith("http"): raise AppError("Invalid link", where="Step 2", why="Not a pre-filled link.", fix=how, technical=link)
     if not extract_entry_ids(link): raise AppError("No entry IDs", where="Step 2", why="Link missing 'entry.' values.", fix=how, technical=link)
@@ -1014,9 +1017,13 @@ def view_configure():
         current_time = now_ist.time()
         default_end_time = (now_ist + timedelta(hours=1)).time()
 
-        # Use the custom 12-hour AM/PM picker
-        start = get_time_12h("Start Time (12-hour)", saved.get("start", current_time), "start_time")
-        end = get_time_12h("End Time (12-hour)", saved.get("end", default_end_time), "end_time")
+        # Start Time in its own container
+        with st.container(border=True):
+            start = get_time_12h_compact("Start Time", saved.get("start", current_time), "start_time")
+        
+        # End Time in its own container
+        with st.container(border=True):
+            end = get_time_12h_compact("End Time", saved.get("end", default_end_time), "end_time")
         
         st.markdown("---")
         
