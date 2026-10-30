@@ -1,6 +1,6 @@
 """
 FormIntellect — Professional Google Form submission scheduler.
-Single-file version with custom theme and execution table.
+Single-file version with custom theme, execution table, and forced 12h UI.
 """
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] { background: var(--card) !impor
 [data-testid="stWidgetLabel"] p { color: var(--muted-fg) !important; font-size: 0.875rem !important; font-weight: 500; }
 div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="select"] > div, div[data-baseweb="textarea"] { background: var(--accent) !important; border-color: var(--border) !important; border-radius: var(--radius) !important; }
 div[data-baseweb="input"]:focus-within { border-color: var(--primary) !important; }
-input, textarea { color: var(--text-primary) !important; font-size: 0.95rem; }
+input, textarea, select { color: var(--text-primary) !important; font-size: 0.95rem; }
 
 [data-testid="stFileUploaderDropzone"] { background: var(--accent) !important; border: 2px dashed var(--border) !important; border-radius: var(--radius) !important; padding: 2rem !important; transition: all 0.2s ease; }
 [data-testid="stFileUploaderDropzone"]:hover { border-color: var(--primary) !important; background: rgba(0,138,80,0.05) !important; }
@@ -197,7 +197,7 @@ input, textarea { color: var(--text-primary) !important; font-size: 0.95rem; }
 }
 """
 
-STAGES = [("configure", "Setup", "Data & Form"), ("preflight", "Re", "Check Details"),
+STAGES = [("configure", "Setup", "Data & Form"), ("preflight", "Review", "Check Details"),
           ("execute", "Running", "Live Progress"), ("results", "Done", "Summary")]
 
 STATUS_LABEL = {
@@ -279,6 +279,35 @@ def format_human(seconds):
 def fmt_clock(dt): 
     # Returns time in 12-hour format with seconds and AM/PM (e.g., 12:39:00 PM)
     return dt.strftime("%I:%M:%S %p").lstrip("0")
+
+# Custom 12-hour AM/PM time picker to bypass browser locale settings
+def get_time_12h(label, default_time, key_base):
+    st.markdown(f"**{label}**")
+    c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
+    
+    if default_time is None:
+        default_time = datetime.now(IST).time()
+        
+    h, m, s = default_time.hour, default_time.minute, default_time.second
+    period = "AM" if h < 12 else "PM"
+    h12 = h % 12
+    if h12 == 0: h12 = 12
+    
+    with c1:
+        hour = st.number_input("Hour", 1, 12, h12, key=f"{key_base}_h", label_visibility="collapsed")
+    with c2:
+        minute = st.number_input("Min", 0, 59, m, key=f"{key_base}_m", label_visibility="collapsed")
+    with c3:
+        second = st.number_input("Sec", 0, 59, s, key=f"{key_base}_s", label_visibility="collapsed")
+    with c4:
+        ampm = st.selectbox("AM/PM", ["AM", "PM"], index=0 if period=="AM" else 1, key=f"{key_base}_p", label_visibility="collapsed")
+        
+    # Convert 12h back to 24h for the backend logic
+    final_h = hour
+    if ampm == "PM" and hour != 12: final_h += 12
+    if ampm == "AM" and hour == 12: final_h = 0
+    
+    return dtime(final_h, minute, second)
 
 # ============================================================
 #  ERRORS & DATA LOADING
@@ -729,7 +758,7 @@ def check_link(link):
     link = link.strip()
     how = "Open form → ⋮ menu → 'Get pre-filled link' → Fill answers → 'Get link' → Copy."
     if not link: raise AppError("No form link", where="Step 2", why="Box empty.", fix=how)
-    if "/form" not in link or not link.startswith("http"): raise AppError("Invalid link", where="Step 2", why="Not a pre-filled link.", fix=how, technical=link)
+    if "/viewform" not in link or not link.startswith("http"): raise AppError("Invalid link", where="Step 2", why="Not a pre-filled link.", fix=how, technical=link)
     if not extract_entry_ids(link): raise AppError("No entry IDs", where="Step 2", why="Link missing 'entry.' values.", fix=how, technical=link)
     return link
 
@@ -748,7 +777,7 @@ def prepare(inp: dict, workdir: str) -> Prepared:
     lines: list = []
     log = lines.append
     prefilled_link = check_link(inp["link"])
-    form_url = prefilled_link.split("/form")[0] + "/formResponse"
+    form_url = prefilled_link.split("/viewform")[0] + "/formResponse"
     df, source_label, output_path = load_dataframe(inp, workdir, log)
     if df.empty: raise AppError("No rows", where="Step 1", why="Only headers found.", fix="Add data.")
     df.columns = [str(c).strip() for c in df.columns]
@@ -924,12 +953,6 @@ def view_configure():
     saved = st.session_state.get("inp", {})
     section_head("Setup Your Run", "Complete these four steps. Nothing is sent until you review everything.")
     
-    # Calculate current IST time for dynamic defaults
-    now_ist = datetime.now(IST)
-    current_time = now_ist.time()
-    # Set end time to 1 hour from now by default if no previous value exists
-    default_end_time = (now_ist + timedelta(hours=1)).time()
-    
     with st.container(border=True):
         step_head("01", "Your Data", "Provide your spreadsheet with one row per response.")
         kinds = ["Upload a file", "Google Sheet link", "Enter data manually"] + (["File on this computer"] if ALLOW_LOCAL_PATHS else [])
@@ -985,22 +1008,15 @@ def view_configure():
 
     with st.container(border=True):
         step_head("04", "When to Submit", "Entries spread randomly between these times (IST).")
-        c1, c2 = st.columns(2)
         
-        # Use current IST time as default instead of hardcoded 9:00 / 11:00
-        start = c1.time_input(
-            "Start Time (12-hour, HH:MM:SS)", 
-            value=saved.get("start", current_time), 
-            step=1, 
-            key="start"
-        )
-        end = c2.time_input(
-            "End Time (12-hour, HH:MM:SS)", 
-            value=saved.get("end", default_end_time), 
-            step=1, 
-            key="end",
-            help="If earlier than start, continues past midnight"
-        )
+        # Calculate current IST time for dynamic defaults
+        now_ist = datetime.now(IST)
+        current_time = now_ist.time()
+        default_end_time = (now_ist + timedelta(hours=1)).time()
+
+        # Use the custom 12-hour AM/PM picker
+        start = get_time_12h("Start Time (12-hour)", saved.get("start", current_time), "start_time")
+        end = get_time_12h("End Time (12-hour)", saved.get("end", default_end_time), "end_time")
         
         st.markdown("---")
         
