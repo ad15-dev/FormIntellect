@@ -107,6 +107,14 @@ div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="sel
 div[data-baseweb="input"]:focus-within { border-color: var(--primary) !important; }
 input, textarea, select { color: var(--text-primary) !important; font-size: 0.95rem; }
 
+/* Force 12h Time Picker Layout */
+.time-picker-row { display: flex; gap: 0.5rem; align-items: center; }
+.time-picker-row > div { flex: 1; min-width: 0; }
+.time-picker-row [data-testid="stNumberInput"] input, 
+.time-picker-row [data-testid="stSelectbox"] div[role="combobox"] { 
+  text-align: center; font-family: monospace; font-size: 1.1rem; padding: 0.5rem; 
+}
+
 [data-testid="stFileUploaderDropzone"] { background: var(--accent) !important; border: 2px dashed var(--border) !important; border-radius: var(--radius) !important; padding: 2rem !important; transition: all 0.2s ease; }
 [data-testid="stFileUploaderDropzone"]:hover { border-color: var(--primary) !important; background: rgba(0,138,80,0.05) !important; }
 [data-testid="stFileUploaderDropzone"] p { color: var(--muted-fg) !important; font-size: 0.95rem !important; }
@@ -279,11 +287,10 @@ def format_human(seconds):
 def fmt_clock(dt): 
     return dt.strftime("%I:%M:%S %p").lstrip("0")
 
-# Custom 12-hour AM/PM time picker inside a single bordered cell
+# Custom 12-hour AM/PM time picker formatted as HH:MM:SS AM/PM
 def get_time_12h(label, default_time, key_base):
     with st.container(border=True):
         st.markdown(f"**{label}**")
-        c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
         
         if default_time is None:
             default_time = datetime.now(IST).time()
@@ -293,13 +300,20 @@ def get_time_12h(label, default_time, key_base):
         h12 = h % 12
         if h12 == 0: h12 = 12
         
-        with c1:
+        cols = st.columns([2, 1, 2, 1, 2, 1, 3])
+        with cols[0]:
             hour = st.number_input("Hour", 1, 12, h12, key=f"{key_base}_h", label_visibility="collapsed")
-        with c2:
+        with cols[1]:
+            st.markdown("<div style='padding-top:1.5rem;text-align:center;font-weight:bold'>:</div>", unsafe_allow_html=True)
+        with cols[2]:
             minute = st.number_input("Min", 0, 59, m, key=f"{key_base}_m", label_visibility="collapsed")
-        with c3:
+        with cols[3]:
+            st.markdown("<div style='padding-top:1.5rem;text-align:center;font-weight:bold'>:</div>", unsafe_allow_html=True)
+        with cols[4]:
             second = st.number_input("Sec", 0, 59, s, key=f"{key_base}_s", label_visibility="collapsed")
-        with c4:
+        with cols[5]:
+            st.markdown("<div style='padding-top:1.5rem;text-align:center;font-weight:bold'></div>", unsafe_allow_html=True)
+        with cols[6]:
             ampm = st.selectbox("AM/PM", ["AM", "PM"], index=0 if period=="AM" else 1, key=f"{key_base}_p", label_visibility="collapsed")
             
         final_h = hour
@@ -1016,9 +1030,9 @@ def view_configure():
         # Use the custom 12-hour AM/PM picker in separate single cells
         c1, c2 = st.columns(2)
         with c1:
-            start = get_time_12h("Start Time", saved.get("start", current_time), "start_time")
+            start = get_time_12h("Start Time (HH:MM:SS AM/PM)", saved.get("start", current_time), "start_time")
         with c2:
-            end = get_time_12h("End Time", saved.get("end", default_end_time), "end_time")
+            end = get_time_12h("End Time (HH:MM:SS AM/PM)", saved.get("end", default_end_time), "end_time")
         
         st.markdown("---")
         
