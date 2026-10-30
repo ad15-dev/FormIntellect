@@ -280,39 +280,58 @@ def fmt_clock(dt):
     return dt.strftime("%I:%M:%S %p").lstrip("0")
 
 # Custom 12-hour AM/PM time picker in a single horizontal bordered cell
+# Custom 12-hour AM/PM time picker as a single string input
 def get_time_12h(label, default_time, key_base):
     st.markdown(f"**{label}**")
+    
+    if default_time is None:
+        default_time = datetime.now(IST).time()
+    
+    # Format as "H:MM:SS AM/PM" (e.g., "2:06:02 PM")
+    h = default_time.hour
+    m = default_time.minute
+    s = default_time.second
+    period = "AM" if h < 12 else "PM"
+    h12 = h % 12
+    if h12 == 0: h12 = 12
+    default_str = f"{h12}:{m:02d}:{s:02d} {period}"
+    
     with st.container(border=True):
-        if default_time is None:
-            default_time = datetime.now(IST).time()
+        time_str = st.text_input(
+            "Time (H:MM:SS AM/PM)", 
+            value=default_str, 
+            key=f"{key_base}_input",
+            label_visibility="collapsed",
+            help="Format: H:MM:SS AM/PM (e.g., 2:06:02 PM or 14:06:02)"
+        )
+    
+    # Parse the time string
+    try:
+        # Try parsing "H:MM:SS AM/PM" format
+        if "AM" in time_str.upper() or "PM" in time_str.upper():
+            time_part, period_part = time_str.strip().rsplit(" ", 1)
+            period_part = period_part.upper()
+            hms = time_part.split(":")
+            hour = int(hms[0])
+            minute = int(hms[1]) if len(hms) > 1 else 0
+            second = int(hms[2]) if len(hms) > 2 else 0
             
-        h, m, s = default_time.hour, default_time.minute, default_time.second
-        period = "AM" if h < 12 else "PM"
-        h12 = h % 12
-        if h12 == 0: h12 = 12
+            # Convert to 24-hour format
+            if period_part == "PM" and hour != 12:
+                hour += 12
+            elif period_part == "AM" and hour == 12:
+                hour = 0
+        else:
+            # Try parsing 24-hour format "HH:MM:SS"
+            hms = time_str.split(":")
+            hour = int(hms[0])
+            minute = int(hms[1]) if len(hms) > 1 else 0
+            second = int(hms[2]) if len(hms) > 2 else 0
         
-        cols = st.columns([2, 1, 2, 1, 2, 1, 3])
-        with cols[0]:
-            hour = st.number_input("Hour", 1, 12, h12, key=f"{key_base}_h", label_visibility="collapsed")
-        with cols[1]:
-            st.markdown("<div style='padding-top:1.2rem;text-align:center;font-weight:bold;font-size:1.2rem'>:</div>", unsafe_allow_html=True)
-        with cols[2]:
-            minute = st.number_input("Min", 0, 59, m, key=f"{key_base}_m", label_visibility="collapsed")
-        with cols[3]:
-            st.markdown("<div style='padding-top:1.2rem;text-align:center;font-weight:bold;font-size:1.2rem'>:</div>", unsafe_allow_html=True)
-        with cols[4]:
-            second = st.number_input("Sec", 0, 59, s, key=f"{key_base}_s", label_visibility="collapsed")
-        with cols[5]:
-            st.markdown("<div style='padding-top:1.2rem;text-align:center;font-weight:bold;font-size:1.2rem'></div>", unsafe_allow_html=True)
-        with cols[6]:
-            ampm = st.selectbox("AM/PM", ["AM", "PM"], index=0 if period=="AM" else 1, key=f"{key_base}_p", label_visibility="collapsed")
-            
-        final_h = hour
-        if ampm == "PM" and hour != 12: final_h += 12
-        if ampm == "AM" and hour == 12: final_h = 0
-        
-        return dtime(final_h, minute, second)
-
+        return dtime(hour, minute, second)
+    except:
+        # Return default time if parsing fails
+        return default_time
 # ============================================================
 #  ERRORS & DATA LOADING
 # ============================================================
